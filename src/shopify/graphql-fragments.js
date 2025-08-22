@@ -98,11 +98,6 @@ export const FRAGMENTS = {
     type
     displayName
     updatedAt
-    fields {
-      key
-      value
-      type
-    }
     capabilities {
       publishable {
         status
@@ -110,6 +105,11 @@ export const FRAGMENTS = {
       onlineStore {
         templateSuffix
       }
+    }
+    fields {
+      key
+      value
+      type
     }
   `,
 
@@ -129,11 +129,20 @@ export const QUERIES = {
    */
   buildPaginatedQuery(resource, fragment, filters = '', filterVariables = '') {
     const variableDeclarations = filterVariables ? `, ${filterVariables}` : '';
-    return `
+
+    // For metaobjects, the type parameter must come FIRST
+    let queryParams;
+    if (resource === 'metaobjects' && filters.includes('type: $type')) {
+      queryParams = `type: $type, first: $first, after: $after`;
+    } else {
+      queryParams = `first: $first, after: $after${
+        filters ? ', ' + filters : ''
+      }`;
+    }
+
+    const query = `
       query($first: Int!, $after: String${variableDeclarations}) {
-        ${resource}(first: $first, after: $after${
-      filters ? ', ' + filters : ''
-    }) {
+        ${resource}(${queryParams}) {
           edges {
             node {
               ${fragment}
@@ -147,6 +156,8 @@ export const QUERIES = {
         }
       }
     `;
+
+    return query;
   },
 
   /**

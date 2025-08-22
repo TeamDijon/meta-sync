@@ -497,8 +497,16 @@ export class DefinitionManager {
           metaobjectDef.entriesCount =
             entriesData.metaobjectDefinitionByType?.metaobjectsCount || 0;
 
-          // Optionally fetch actual entries (for now, just the count)
-          metaobjectDef.entries = [];
+          // Fetch actual entries using the fixed query
+          this.logger.verbose(
+            `Fetching entries for metaobject type: ${metaobjectDef.type}`
+          );
+          metaobjectDef.entries = await this.getMetaobjectEntries(
+            metaobjectDef.type
+          );
+          this.logger.verbose(
+            `Found ${metaobjectDef.entries.length} entries for ${metaobjectDef.type}`
+          );
         } catch (error) {
           this.logger.verbose(
             `Failed to get entry count for ${metaobjectDef.type}: ${error.message}`
@@ -558,10 +566,21 @@ export class DefinitionManager {
           `Processing entries for metaobject type: ${metaobjectDef.type}`
         );
 
-        // Get all entries from source
-        const sourceEntries = await this.getMetaobjectEntries(
-          metaobjectDef.type
-        );
+        // Get entries from the already-fetched data, or fetch if not available
+        let sourceEntries;
+        if (metaobjectDef.entries && Array.isArray(metaobjectDef.entries)) {
+          // Use pre-fetched entries from source store
+          sourceEntries = metaobjectDef.entries;
+          this.logger.verbose(
+            `Using pre-fetched entries for ${metaobjectDef.type}: ${sourceEntries.length} entries`
+          );
+        } else {
+          // Fallback: fetch entries (this would fetch from target store, which is wrong for copying)
+          this.logger.warning(
+            `No pre-fetched entries found for ${metaobjectDef.type}, this may indicate a bug in entry fetching`
+          );
+          sourceEntries = await this.getMetaobjectEntries(metaobjectDef.type);
+        }
 
         if (sourceEntries.length === 0) {
           this.logger.verbose(`No entries found for ${metaobjectDef.type}`);

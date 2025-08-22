@@ -246,7 +246,7 @@ export class CommandHandler {
 
     this.logger.info('Fetching definitions from store...');
     const allDefinitions = includeEntries
-      ? await manager.getAllDefinitionsWithEntries()
+      ? await manager.getAllDefinitionsWithEntries(includeEntries)
       : await manager.getAllDefinitions();
 
     this.logger.verbose('Applying resource type filtering...');

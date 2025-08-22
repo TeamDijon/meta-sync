@@ -9,7 +9,7 @@ export class ShopifyClient {
 
     this.token = token;
     this.storeName = storeName || this.extractStoreFromToken(token);
-    this.apiUrl = `https://${this.storeName}.myshopify.com/admin/api/2025-01/graphql.json`;
+    this.apiUrl = `https://${this.storeName}.myshopify.com/admin/api/2025-10/graphql.json`;
   }
 
   extractStoreFromToken(token) {
@@ -176,7 +176,9 @@ export class ShopifyClient {
       'type: $type',
       '$type: String!'
     );
-    return await this.query(query, { type, first, after });
+    const response = await this.query(query, { type, first, after });
+
+    return response;
   }
 
   async getMetaobjectDefinitionWithEntriesCount(type) {

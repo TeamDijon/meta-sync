@@ -194,4 +194,4 @@ const deleteCommand = COMMON_OPTIONS.withStandardOptions(
   )
 ).action(createCommandAction(DeleteCommand));
 
-export { deleteCommand };
+export { deleteCommand, DeleteCommand };

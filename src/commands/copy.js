@@ -62,6 +62,28 @@ class CopyCommand extends CommandHandler {
         metafields: matches.metafields,
         metaobjects: matches.metaobjects,
       };
+
+      // If entries are requested, fetch them for the matching metaobject definitions
+      if (includeEntries && definitionsToCopy.metaobjects.length > 0) {
+        this.logger.verbose(
+          'Fetching entries for manifest-defined metaobjects...'
+        );
+        for (const metaobjectDef of definitionsToCopy.metaobjects) {
+          try {
+            metaobjectDef.entries = await sourceManager.getMetaobjectEntries(
+              metaobjectDef.type
+            );
+            this.logger.verbose(
+              `Found ${metaobjectDef.entries.length} entries for ${metaobjectDef.type}`
+            );
+          } catch (error) {
+            this.logger.warning(
+              `Failed to fetch entries for ${metaobjectDef.type}: ${error.message}`
+            );
+            metaobjectDef.entries = [];
+          }
+        }
+      }
     } else {
       // Copy all definitions
       this.logger.info(
@@ -246,4 +268,4 @@ const copyCommand = COMMON_OPTIONS.withStandardOptions(
   )
 ).action(createCommandAction(CopyCommand));
 
-export { copyCommand };
+export { copyCommand, CopyCommand };
