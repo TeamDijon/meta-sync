@@ -54,11 +54,22 @@ class BulkCommand extends CommandHandler {
       { operation: 'copy' }
     );
 
-    const targetFiltered = await this.prepareDefinitionsForOperation(
-      targetManager,
-      targetDefinitions,
-      { operation: 'delete' }
-    );
+    // For target (delete), handle empty stores gracefully
+    let targetFiltered = { metafields: [], metaobjects: [] };
+    try {
+      targetFiltered = await this.prepareDefinitionsForOperation(
+        targetManager,
+        targetDefinitions,
+        { operation: 'delete' }
+      );
+    } catch (error) {
+      if (error.message.includes('No definitions available to delete')) {
+        this.logger.info('Target store is empty - no definitions to delete');
+        targetFiltered = { metafields: [], metaobjects: [] };
+      } else {
+        throw error; // Re-throw other errors
+      }
+    }
 
     // Calculate counts
     const sourceTotal =

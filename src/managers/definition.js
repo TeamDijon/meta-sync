@@ -164,6 +164,18 @@ export class DefinitionManager {
     };
   }
 
+  /**
+   * Format errors from client response for error messages
+   * @param {Array} errors - Array of error objects
+   * @returns {string} - Formatted error message
+   */
+  formatErrorMessage(errors) {
+    if (!errors || errors.length === 0) {
+      return 'Unknown error';
+    }
+    return errors.map((error) => error.message).join(', ');
+  }
+
   async createMetafieldDefinition(def) {
     this.logger.verbose(
       `Creating metafield definition: ${def.namespace}/${def.key}`
@@ -206,7 +218,9 @@ export class DefinitionManager {
 
     if (!result.success) {
       throw new Error(
-        `Failed to create metafield definition ${def.namespace}/${def.key}: ${result.errorMessage}`
+        `Failed to create metafield definition ${def.namespace}/${
+          def.key
+        }: ${this.formatErrorMessage(result.errors)}`
       );
     }
 
@@ -254,7 +268,9 @@ export class DefinitionManager {
 
     if (!result.success) {
       throw new Error(
-        `Failed to create metaobject definition ${def.type}: ${result.errorMessage}`
+        `Failed to create metaobject definition ${
+          def.type
+        }: ${this.formatErrorMessage(result.errors)}`
       );
     }
 
@@ -270,11 +286,13 @@ export class DefinitionManager {
 
     if (!result.success) {
       throw new Error(
-        `Failed to delete metafield definition ${def.namespace}/${def.key}: ${result.errorMessage}`
+        `Failed to delete metafield definition ${def.namespace}/${
+          def.key
+        }: ${this.formatErrorMessage(result.errors)}`
       );
     }
 
-    return result.metafieldDefinitionDelete.deletedDefinitionId;
+    return result.data;
   }
 
   async deleteMetaobjectDefinition(def) {
@@ -284,7 +302,9 @@ export class DefinitionManager {
 
     if (!result.success) {
       throw new Error(
-        `Failed to delete metaobject definition ${def.type}: ${result.errorMessage}`
+        `Failed to delete metaobject definition ${
+          def.type
+        }: ${this.formatErrorMessage(result.errors)}`
       );
     }
 
@@ -640,7 +660,9 @@ export class DefinitionManager {
         );
 
         if (!result.success) {
-          throw new Error(`Upsert failed: ${result.errorMessage}`);
+          throw new Error(
+            `Upsert failed: ${this.formatErrorMessage(result.errors)}`
+          );
         }
 
         this.logger.verbose(`Updated entry: ${entryIdentifier}`);
@@ -654,7 +676,9 @@ export class DefinitionManager {
         );
 
         if (!result.success) {
-          throw new Error(`Create failed: ${result.errorMessage}`);
+          throw new Error(
+            `Create failed: ${this.formatErrorMessage(result.errors)}`
+          );
         }
 
         this.logger.verbose(`Created entry: ${entryIdentifier}`);

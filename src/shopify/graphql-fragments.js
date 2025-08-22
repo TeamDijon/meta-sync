@@ -1,6 +1,6 @@
 /**
  * Common GraphQL fragments and queries for Shopify API
- * Reduces duplication and ensures consistency across API calls
+ * Reduces duplication and ensures consistency across operations
  */
 
 // Common field fragments
@@ -20,6 +20,26 @@ export const FRAGMENTS = {
       name
       type
       value
+    }
+    access {
+      admin
+      storefront
+      customerAccount
+    }
+    capabilities {
+      adminFilterable {
+        eligible
+        enabled
+        status
+      }
+      smartCollectionCondition {
+        eligible
+        enabled
+      }
+      uniqueValues {
+        eligible
+        enabled
+      }
     }
   `,
 
@@ -55,14 +75,29 @@ export const FRAGMENTS = {
       translatable {
         enabled
       }
+      renderable {
+        enabled
+        data {
+          metaTitleKey
+          metaDescriptionKey
+        }
+      }
+      onlineStore {
+        enabled
+        data {
+          urlHandle
+          canCreateRedirects
+        }
+      }
     }
   `,
 
   METAOBJECT_ENTRY: `
     id
-    type
     handle
+    type
     displayName
+    updatedAt
     fields {
       key
       value
@@ -71,6 +106,9 @@ export const FRAGMENTS = {
     capabilities {
       publishable {
         status
+      }
+      onlineStore {
+        templateSuffix
       }
     }
   `,
@@ -89,9 +127,10 @@ export const QUERIES = {
   /**
    * Build a paginated query with consistent structure
    */
-  buildPaginatedQuery(resource, fragment, filters = '') {
+  buildPaginatedQuery(resource, fragment, filters = '', filterVariables = '') {
+    const variableDeclarations = filterVariables ? `, ${filterVariables}` : '';
     return `
-      query($first: Int!, $after: String) {
+      query($first: Int!, $after: String${variableDeclarations}) {
         ${resource}(first: $first, after: $after${
       filters ? ', ' + filters : ''
     }) {
@@ -113,10 +152,15 @@ export const QUERIES = {
   /**
    * Build a create mutation with consistent error handling
    */
-  buildCreateMutation(mutationName, inputType, fragment) {
+  buildCreateMutation(
+    mutationName,
+    inputType,
+    fragment,
+    parameterName = 'definition'
+  ) {
     return `
-      mutation($input: ${inputType}!) {
-        ${mutationName}(input: $input) {
+      mutation($${parameterName}: ${inputType}) {
+        ${mutationName}(${parameterName}: $${parameterName}) {
           ${fragment}
           ${FRAGMENTS.ERROR_FRAGMENT}
         }

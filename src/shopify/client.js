@@ -52,11 +52,13 @@ export class ShopifyClient {
 
   // Metafield Definition Operations
   async getMetafieldDefinitions(ownerType = null) {
-    const filters = ownerType ? 'ownerType: $ownerType,' : '';
+    const filters = ownerType ? 'ownerType: $ownerType' : '';
+    const filterVariables = ownerType ? '$ownerType: MetafieldOwnerType!' : '';
     const query = QUERIES.buildPaginatedQuery(
       'metafieldDefinitions',
       FRAGMENTS.METAFIELD_DEFINITION,
-      filters
+      filters,
+      filterVariables
     );
 
     const variables = { first: 100 };
@@ -74,7 +76,7 @@ export class ShopifyClient {
       `createdDefinition { ${FRAGMENTS.METAFIELD_DEFINITION} }`
     );
 
-    const response = await this.query(mutation, { input: definition });
+    const response = await this.query(mutation, { definition });
     const result = ErrorProcessor.processShopifyErrors(
       response.metafieldDefinitionCreate,
       'createMetafieldDefinition',
@@ -128,7 +130,7 @@ export class ShopifyClient {
       `metaobjectDefinition { ${FRAGMENTS.METAOBJECT_DEFINITION} }`
     );
 
-    const response = await this.query(mutation, { input: definition });
+    const response = await this.query(mutation, { definition });
     const result = ErrorProcessor.processShopifyErrors(
       response.metaobjectDefinitionCreate,
       'createMetaobjectDefinition',
@@ -171,7 +173,8 @@ export class ShopifyClient {
     const query = QUERIES.buildPaginatedQuery(
       'metaobjects',
       FRAGMENTS.METAOBJECT_ENTRY,
-      'type: $type'
+      'type: $type',
+      '$type: String!'
     );
     return await this.query(query, { type, first, after });
   }
@@ -204,11 +207,14 @@ export class ShopifyClient {
   }
 
   async createMetaobjectEntry(type, handle, fields, capabilities = null) {
-    const mutation = QUERIES.buildCreateMutation(
-      'metaobjectCreate',
-      'MetaobjectCreateInput!',
-      `metaobject { ${FRAGMENTS.METAOBJECT_ENTRY} }`
-    );
+    const mutation = `
+      mutation($metaobject: MetaobjectCreateInput!) {
+        metaobjectCreate(metaobject: $metaobject) {
+          metaobject { ${FRAGMENTS.METAOBJECT_ENTRY} }
+          ${FRAGMENTS.ERROR_FRAGMENT}
+        }
+      }
+    `;
 
     const metaobject = {
       type,
@@ -223,7 +229,7 @@ export class ShopifyClient {
       metaobject.capabilities = capabilities;
     }
 
-    const response = await this.query(mutation, { input: metaobject });
+    const response = await this.query(mutation, { metaobject });
     const result = ErrorProcessor.processShopifyErrors(
       response.metaobjectCreate,
       'createMetaobjectEntry',
