@@ -198,6 +198,7 @@ Found 25 metafield definitions and 3 metaobject definitions.
 
 - **Name:** Recipe
 - **Description:** Recipe with ingredients and instructions
+- **Entries:** 8 entries found
 - **Fields:**
   - **title** (single_line_text_field) - Recipe title
   - **ingredients** (multi_line_text_field) - Ingredient list
