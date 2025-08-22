@@ -1,0 +1,36 @@
+{
+  "name": "meta-sync",
+  "version": "1.0.0",
+  "description": "CLI tool to sync metafield/metaobject definitions between Shopify stores",
+  "license": "ISC",
+  "author": "",
+  "type": "module",
+  "main": "src/index.js",
+  "bin": {
+    "meta-sync": "./src/cli.js"
+  },
+  "scripts": {
+    "start": "node src/cli.js",
+    "dev": "node --watch src/cli.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "help": "node src/cli.js --help",
+    "bulk": "node src/cli.js bulk",
+    "copy": "node src/cli.js copy",
+    "delete": "node src/cli.js delete",
+    "list": "node src/cli.js list"
+  },
+  "keywords": [
+    "shopify",
+    "metafields",
+    "metaobjects",
+    "sync",
+    "cli"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "commander": "^14.0.0",
+    "dotenv": "^17.2.1"
+  }
+}
