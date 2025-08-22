@@ -171,7 +171,7 @@ const copyCommand = new Command('copy')
 
       // Copy definitions to target
       ctx.logger.info('Copying definitions to target store...');
-      const copyResults = await targetManager.copyDefinitions(
+      const copyResults = await targetManager.copyDefinitionsWithDependencies(
         definitionsToCopy
       );
 

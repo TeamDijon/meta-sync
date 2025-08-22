@@ -31,18 +31,35 @@ export class DefinitionManager {
     if (dryRun) {
       this.logger.dryRunInfo(
         `Would process ${
-          definitions.metafields?.length || 0
-        } metafield definitions`
+          definitions.metaobjects?.length || 0
+        } metaobject definitions`
       );
       this.logger.dryRunInfo(
         `Would process ${
-          definitions.metaobjects?.length || 0
-        } metaobject definitions`
+          definitions.metafields?.length || 0
+        } metafield definitions`
       );
       return results;
     }
 
-    // Process metafields
+    // Process metaobjects first (they can't reference metafields, only other metaobjects)
+    for (const def of definitions.metaobjects || []) {
+      try {
+        await operation.metaobject(def);
+        results.metaobjects.success++;
+      } catch (error) {
+        results.metaobjects.errors.push({
+          definition: def.type,
+          error: error.message,
+        });
+        this.logger.error(
+          `Failed to ${operation.name} metaobject ${def.type}:`,
+          error.message
+        );
+      }
+    }
+
+    // Process metafields second (they can reference metaobjects that now exist)
     for (const def of definitions.metafields || []) {
       try {
         await operation.metafield(def);
@@ -55,23 +72,6 @@ export class DefinitionManager {
         });
         this.logger.error(
           `Failed to ${operation.name} metafield ${identifier}:`,
-          error.message
-        );
-      }
-    }
-
-    // Process metaobjects
-    for (const def of definitions.metaobjects || []) {
-      try {
-        await operation.metaobject(def);
-        results.metaobjects.success++;
-      } catch (error) {
-        results.metaobjects.errors.push({
-          definition: def.type,
-          error: error.message,
-        });
-        this.logger.error(
-          `Failed to ${operation.name} metaobject ${def.type}:`,
           error.message
         );
       }
@@ -245,18 +245,6 @@ export class DefinitionManager {
     return result.metaobjectDefinitionDelete.deletedId;
   }
 
-  async copyDefinitions(definitions, dryRun = false) {
-    return this.processDefinitions(
-      definitions,
-      {
-        name: 'copy',
-        metafield: async (def) => this.createMetafieldDefinition(def),
-        metaobject: async (def) => this.createMetaobjectDefinition(def),
-      },
-      { dryRun }
-    );
-  }
-
   async copyDefinitionsWithDependencies(definitions, dryRun = false) {
     const results = {
       metafields: { success: 0, errors: [] },
@@ -276,18 +264,7 @@ export class DefinitionManager {
     // Track created metaobject IDs for reference mapping
     const metaobjectIdMapping = new Map();
 
-    // Copy metafield definitions first using the generic handler
-    const metafieldResults = await this.processDefinitions(
-      { metafields: definitions.metafields, metaobjects: [] },
-      {
-        name: 'copy',
-        metafield: async (def) => this.createMetafieldDefinition(def),
-        metaobject: async () => {}, // No-op for this call
-      }
-    );
-    results.metafields = metafieldResults.metafields;
-
-    // Copy metaobject definitions with multi-pass retry for dependencies
+    // Copy metaobject definitions first with multi-pass retry for dependencies
     let pendingMetaobjects = [...definitions.metaobjects];
     let pass = 0;
 
@@ -364,6 +341,17 @@ export class DefinitionManager {
         });
       }
     }
+
+    // Copy metafield definitions second (after metaobjects exist and can be referenced)
+    const metafieldResults = await this.processDefinitions(
+      { metafields: definitions.metafields, metaobjects: [] },
+      {
+        name: 'copy',
+        metafield: async (def) => this.createMetafieldDefinition(def),
+        metaobject: async () => {}, // No-op for this call
+      }
+    );
+    results.metafields = metafieldResults.metafields;
 
     return results;
   }
