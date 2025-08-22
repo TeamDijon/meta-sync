@@ -1,596 +1,369 @@
 # Meta-Sync
 
-A CLI tool to sync metafield and metaobject definitions between Shopify stores, perfect for managing staging → production deployments.
+> A powerful CLI tool for syncing Shopify metafield and metaobject definitions between stores. Perfect for staging → production deployments with safety controls and manifest-based workflows.
 
-## Features
+[![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
+[![Shopify API](https://img.shields.io/badge/Shopify_API-2025--01-blue.svg)](https://shopify.dev/docs/api)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-- ✅ **List** all metafield/metaobject definitions from any store
-- ✅ **Copy** selective definitions between stores using manifest files
-- ✅ **Bulk sync** complete store definitions (delete all + copy all)
-- ✅ **Delete** selective or all definitions from a store
-- ✅ **Dry-run** mode to preview changes before execution
-- ✅ **Verbose logging** with optional log file output
-- ✅ **Manifest-based** selective operations for granular control
+## ✨ Features
 
-## Installation
+- 🔍 **List** all definitions from any store with unified manifest export
+- 📋 **Copy** selective definitions using manifest files
+- 🚀 **Bulk sync** complete store definitions (destructive + safe)
+- 🗑️ **Delete** selective or all definitions with confirmation prompts
+- 🎭 **Dry-run** preview changes before execution
+- 📝 **Comprehensive logging** with verbose output and file logging
+- 🛡️ **Safety controls** with interactive confirmations for destructive operations
+- 🔄 **Unified manifest format** - seamless list → copy/delete workflow
 
-1. Clone this repository
-2. Install dependencies: `npm install`
-3. Set up your environment configuration (see Configuration section)
-4. Link globally: `npm link` (optional)
+## 🚀 Quick Start
 
-## Configuration
+```bash
+# 1. Clone and install
+git clone <repository-url>
+cd meta-sync
+npm install
 
-Create a `.env` file in the project root with your Shopify private app credentials:
+# 2. Configure environment
+cp .env.example .env
+# Edit .env with your store credentials
+
+# 3. List definitions from a store
+npm run list -- --store staging
+
+# 4. Copy definitions between stores
+npm run copy -- --from staging --to production --dry-run
+```
+
+## ⚙️ Configuration
+
+Create a `.env` file with your Shopify private app credentials:
 
 ```env
-# Store configurations
-STAGING_STORE_URL=your-staging-store.myshopify.com
+# Store configurations - use any naming convention
+STAGING_STORE_URL=my-staging-store.myshopify.com
 STAGING_ACCESS_TOKEN=shppa_xxxxxxxxxx
 
-PRODUCTION_STORE_URL=your-production-store.myshopify.com
+PRODUCTION_STORE_URL=my-production-store.myshopify.com  
 PRODUCTION_ACCESS_TOKEN=shppa_xxxxxxxxxx
 
-# Add more stores as needed
-DEVELOPMENT_STORE_URL=dev-store.myshopify.com
-DEVELOPMENT_ACCESS_TOKEN=shppa_xxxxxxxxxx
+# Add as many stores as needed
+DEV_STORE_URL=dev-store.myshopify.com
+DEV_ACCESS_TOKEN=shppa_xxxxxxxxxx
 ```
 
-**Store Names:** The `--store` parameter uses the prefix from your environment variables. For example:
+> **💡 Store Mapping**: The `--store` parameter uses environment variable prefixes:
+> - `--store staging` → `STAGING_STORE_URL` + `STAGING_ACCESS_TOKEN`
+> - `--store production` → `PRODUCTION_STORE_URL` + `PRODUCTION_ACCESS_TOKEN`
 
-- `--store staging` uses `STAGING_STORE_URL` and `STAGING_ACCESS_TOKEN`
-- `--store production` uses `PRODUCTION_STORE_URL` and `PRODUCTION_ACCESS_TOKEN`
-- `--store development` uses `DEVELOPMENT_STORE_URL` and `DEVELOPMENT_ACCESS_TOKEN`
+## 📖 Commands Overview
 
-## Usage
+### Core Commands
 
-### NPM Scripts (Recommended)
-
-For convenience, you can use npm scripts instead of the full `node src/cli.js` commands:
-
-```bash
-# Show main help
-npm run help
-
-# List definitions
-npm run list -- --store <store> --output definitions.md
-
-# Copy definitions
-npm run copy -- --from <source-store> --to <target-store> --manifest manifest.md
-
-# Bulk sync
-npm run bulk -- --from <source-store> --to <target-store> --dry-run
-
-# Delete definitions
-npm run delete -- --store <store> --manifest cleanup.md
-```
-
-**Note:** Use `--` to pass arguments through npm to the underlying command.
-
-### Direct CLI Usage
-
-You can also use the CLI directly:
-
-```bash
-node src/cli.js --help
-node src/cli.js list --store <store>
-# ... etc
-```
+| Command | Description | Safety Level |
+|---------|-------------|--------------|
+| `list` | Export all definitions to manifest | ✅ Safe |
+| `copy` | Copy selective definitions | ⚠️ Modify target |
+| `bulk` | Complete store sync (delete + copy) | 🚨 Destructive |
+| `delete` | Remove selective/all definitions | 🚨 Destructive |
 
 ### Global Options
 
-All commands support these global options:
+| Option | Description |
+|--------|-------------|
+| `--dry-run` | Preview changes without execution |
+| `--verbose` | Detailed logging output |
+| `--log <path>` | Save logs to file |
+| `--yes` | Skip confirmation prompts (automation) |
 
-- `--dry-run` - Preview changes without executing them
-- `--verbose` - Enable detailed logging output
-- `--log <path>` - Save logs to a specific file
-- `--config <path>` - Use a custom config file location
+## 🛠️ Usage
 
-### Commands
+### Recommended: NPM Scripts
 
-#### 1. List Definitions
-
-List and optionally export all metafield/metaobject definitions from a store:
-
-```bash
-# Using npm scripts (recommended)
-npm run list -- --store <store>
-npm run list -- --store <store> --output definitions.md
-npm run list -- --store <store> --verbose
-
-# Direct CLI usage
-node src/cli.js list --store <store>
-node src/cli.js list --store <store> --output definitions.md
-node src/cli.js list --store <store> --verbose
-```
-
-#### 2. Copy Definitions
-
-Copy specific definitions between stores using manifest files:
+Use NPM scripts for cleaner commands:
 
 ```bash
-# Using npm scripts (recommended)
-npm run copy -- --from <source-store> --to <target-store>
-npm run copy -- --from <source-store> --to <target-store> --manifest manifest.md
-npm run copy -- --from <source-store> --to <target-store> --manifest manifest.md --dry-run
+# List definitions
+npm run list -- --store <store> --output manifest.md
 
-# Direct CLI usage
-node src/cli.js copy --from <source-store> --to <target-store>
-node src/cli.js copy --from <source-store> --to <target-store> --manifest manifest.md
-node src/cli.js copy --from <source-store> --to <target-store> --manifest manifest.md --dry-run
+# Copy with manifest
+npm run copy -- --from <source> --to <target> --manifest manifest.md --dry-run
+
+# Bulk sync (destructive)
+npm run bulk -- --from <source> --to <target> --verbose
+
+# Delete with confirmation  
+npm run delete -- --store <target> --manifest cleanup.md
 ```
 
-#### 3. Bulk Sync
-
-Complete store synchronization (delete all + copy all):
+### Alternative: Direct CLI
 
 ```bash
-# Using npm scripts (recommended)
-npm run bulk -- --from <source-store> --to <target-store>
-npm run bulk -- --from <source-store> --to <target-store> --dry-run
-npm run bulk -- --from <source-store> --to <target-store> --verbose
-
-# Direct CLI usage
-node src/cli.js bulk --from <source-store> --to <target-store>
-node src/cli.js bulk --from <source-store> --to <target-store> --dry-run
-node src/cli.js bulk --from <source-store> --to <target-store> --verbose
+node src/cli.js <command> [options]
 ```
 
-#### 4. Delete Definitions
+## 📋 Unified Manifest Format
 
-Delete definitions from a store:
+The tool uses a **unified manifest format** where `list` output is directly compatible with `copy` and `delete` inputs.
 
-```bash
-# Using npm scripts (recommended)
-npm run delete -- --store <store> --manifest cleanup.md
-npm run delete -- --store <store>
-npm run delete -- --store <store> --manifest cleanup.md --dry-run
-
-# Direct CLI usage
-node src/cli.js delete --store <store> --manifest cleanup.md
-node src/cli.js delete --store <store>
-node src/cli.js delete --store <store> --manifest cleanup.md --dry-run
-
-# Skip confirmation prompt (for automation)
-npm run delete -- --store <store> --manifest cleanup.md --yes
-```
-
-**Interactive Confirmation:**
-
-- Delete operations require interactive confirmation before proceeding
-- Shows detailed impact: number of metafields/metaobjects, target store, operation details
-- Use `--yes` flag to skip confirmation for automation/CI environments
-- Dry-run operations automatically skip confirmation
-
-**Bulk operations also require confirmation:**
-
-```bash
-# Bulk sync with confirmation
-npm run bulk -- --from <source-store> --to <target-store>
-
-# Skip confirmation for automation
-npm run bulk -- --from <source-store> --to <target-store> --yes
-```
-
-## Unified Manifest Format
-
-The tool uses a **unified manifest format** where the `list` command output is directly compatible with `copy` and `delete` command inputs. This eliminates format conversion steps and creates a seamless workflow.
-
-### Generated by List Command
+### Example Manifest
 
 ```markdown
 # Store Definitions: staging
-
 Generated: 2025-08-22T14:00:00.000Z
-
 Found 25 metafield definitions and 3 metaobject definitions.
 
 ## Metafields
 
-### product.specs.dimensions
-
-- **Type:** single_line_text_field
-- **Owner:** PRODUCT
-- **Description:** Product dimensions
-- **Access:** Admin=PUBLIC_READ_WRITE, Storefront=PUBLIC_READ
-
 ### product.specs.weight
-
 - **Type:** number_decimal
-- **Owner:** PRODUCT
+- **Owner:** PRODUCT  
 - **Description:** Product weight in kg
-- **Access:** Admin=PUBLIC_READ_WRITE, Storefront=PUBLIC_READ
 
 ### collection.seo.featured_image
-
 - **Type:** file_reference
 - **Owner:** COLLECTION
-- **Description:** Featured image for collection SEO
-- **Access:** Admin=PUBLIC_READ_WRITE, Storefront=PUBLIC_READ
+- **Description:** Featured image for SEO
 
 ## Metaobjects
 
-### recipe
-
+### recipe  
 - **Name:** Recipe
-- **Description:** Recipe information with ingredients and instructions
+- **Description:** Recipe with ingredients and instructions
 - **Fields:**
   - **title** (single_line_text_field) - Recipe title
-  - **ingredients** (multi_line_text_field) - List of ingredients
-  - **instructions** (rich_text_field) - Step by step instructions
+  - **ingredients** (multi_line_text_field) - Ingredient list
 - **Access:** Admin=PUBLIC_READ_WRITE, Storefront=PUBLIC_READ
 - **Capabilities:** publishable, translatable
-
-### author
-
-- **Name:** Author Profile
-- **Description:** Author information for blog posts
-- **Fields:**
-  - **name** (single_line_text_field) - Author name
-  - **bio** (multi_line_text_field) - Author biography
-- **Access:** Admin=PUBLIC_READ_WRITE, Storefront=PUBLIC_READ
-- **Capabilities:** publishable
-```
-
-### Usage as Input Manifest
-
-The above format can be used directly as input for `copy` and `delete` commands:
-
-```bash
-# Save list output to file
-node src/cli.js list --store <store> > definitions.md
-
-# Edit the file to remove unwanted definitions
-# (remove entire sections from ### header to next ### header)
-
-# Use edited file directly with copy command
-node src/cli.js copy --from <source-store> --to <target-store> --manifest definitions.md
 ```
 
 ### Manifest Rules
 
-- Use `## Metafields` and `## Metaobjects` as section headers
-- Define metafields as `### namespace.key` (e.g., `### product.specs.weight`)
-- Define metaobjects as `### type` (e.g., `### recipe`)
-- All metadata lines are preserved and informational
-- Only `###` headers are parsed for definitions - other content is ignored
+- **Headers**: Use `## Metafields` and `## Metaobjects`
+- **Metafields**: Define as `### namespace.key` 
+- **Metaobjects**: Define as `### type`
+- **Parsing**: Only `###` headers are parsed - other content is informational
 
-## Examples
+## 🔄 Common Workflows
 
-### Typical Workflow
-
-1. **Review source store definitions:**
-
-   ```bash
-   node src/cli.js list --store <source-store> --output review.md
-   ```
-
-2. **Create a selective manifest (or edit the list output directly):**
-
-   ```markdown
-   # Store Migration - Sprint 23
-
-   Generated: 2025-08-22T14:00:00.000Z
-
-   Found 25 metafield definitions and 3 metaobject definitions.
-
-   ## Metafields
-
-   ### product.specs.weight
-
-   - **Type:** number_decimal
-   - **Owner:** PRODUCT
-   - **Description:** Product weight in kg
-
-   ### product.specs.dimensions
-
-   - **Type:** single_line_text_field
-   - **Owner:** PRODUCT
-   - **Description:** Product dimensions
-
-   ## Metaobjects
-
-   ### recipe
-
-   - **Name:** Recipe
-   - **Description:** Recipe information with ingredients and instructions
-   - **Fields:**
-     - **title** (single_line_text_field) - Recipe title
-     - **ingredients** (multi_line_text_field) - List of ingredients
-   - **Access:** Admin=PUBLIC_READ_WRITE, Storefront=PUBLIC_READ
-   - **Capabilities:** publishable, translatable
-   ```
-
-3. **Preview the sync:**
-
-   ```bash
-   node src/cli.js copy --from <source-store> --to <target-store> --manifest deploy-manifest.md --dry-run --verbose
-   ```
-
-4. **Execute the sync:**
-   ```bash
-   node src/cli.js copy --from <source-store> --to <target-store> --manifest deploy-manifest.md --verbose
-   ```
-
-### Emergency Cleanup
+### 1. Selective Deployment
 
 ```bash
-# Delete problematic definitions
-node src/cli.js delete --store <store> --manifest cleanup-manifest.md --dry-run
+# Export current definitions
+npm run list -- --store staging --output review.md
 
-# Full store reset (dangerous!)
-node src/cli.js delete --store <store> --dry-run
+# Edit review.md to keep only desired definitions
+# Preview deployment
+npm run copy -- --from staging --to production --manifest review.md --dry-run
+
+# Execute deployment
+npm run copy -- --from staging --to production --manifest review.md
 ```
 
-### Complete Store Migration
+### 2. Complete Store Migration
 
 ```bash
-# Full sync from source to target store
-node src/cli.js bulk --from <source-store> --to <target-store> --dry-run --verbose
+# Preview full sync
+npm run bulk -- --from staging --to production --dry-run --verbose
+
+# Execute with confirmation
+npm run bulk -- --from staging --to production
+
+# Or skip confirmation for automation
+npm run bulk -- --from staging --to production --yes
 ```
 
-## Error Handling
+### 3. Emergency Cleanup
 
-- The tool validates store configurations before execution
-- Conflicting definitions are automatically detected and resolved
-- Failed operations are logged with detailed error information
-- Use `--dry-run` to preview changes and catch issues early
-- Check log files for detailed error analysis
+```bash
+# Create cleanup manifest
+npm run list -- --store production --output current.md
+# Edit current.md to keep only problematic definitions
 
-## API Requirements
+# Preview deletion
+npm run delete -- --store production --manifest cleanup.md --dry-run
 
-This tool requires Shopify private apps with the following API permissions:
+# Execute deletion (with confirmation)
+npm run delete -- --store production --manifest cleanup.md
+```
 
-### Complete Scope List for All Operations
+### 4. Multi-Environment Pipeline
 
-**Note**: Write access scopes are required for bulk operations, copy commands, and delete commands (mutations). Read scopes are sufficient for listing and viewing metafield definitions.
+```bash
+# Dev → Staging → Production pipeline
+npm run copy -- --from dev --to staging --dry-run
+npm run copy -- --from dev --to staging
 
-To handle all metafield and metaobject operations across all resource types, configure your private app with these access scopes:
+npm run copy -- --from staging --to production --dry-run  
+npm run copy -- --from staging --to production
+```
 
-- `read_products` + `write_products` (Product, Variant, Collection metafields)
-- `read_customers` + `write_customers` (Customer, Company, Company Location metafields\*)
+## 🛡️ Safety Features
+
+### Interactive Confirmations
+
+Destructive operations (`delete`, `bulk`) require confirmation:
+
+```
+⚠️  DESTRUCTIVE OPERATION CONFIRMATION
+
+Operation: Delete metafield/metaobject definitions
+Target Store: production (my-prod-store.myshopify.com)
+Impact: 15 metafield definitions, 3 metaobject definitions
+
+This will permanently delete the above definitions and all associated data.
+
+Continue? (yes/no):
+```
+
+### Confirmation Bypass
+
+For CI/CD automation, skip confirmations:
+
+```bash
+# Automated deployment
+npm run bulk -- --from staging --to production --yes --verbose
+```
+
+### Dry-Run Validation
+
+Always preview changes first:
+
+```bash
+npm run bulk -- --from staging --to production --dry-run --verbose
+```
+
+## 🔑 Shopify API Requirements
+
+### Required Scopes
+
+For complete functionality, configure private apps with these scopes:
+
+**Essential Scopes:**
+- `read_metaobjects_definitions` + `write_metaobjects_definitions`
+- `read_products` + `write_products` (Product/Variant/Collection metafields)
+- `read_customers` + `write_customers` (Customer metafields)
+
+**Additional Resource Scopes:**
 - `read_orders` + `write_orders` (Order metafields)
-- `read_draft_orders` + `write_draft_orders` (Draft Order metafields)
+- `read_draft_orders` + `write_draft_orders` (Draft order metafields)
 - `read_locations` + `write_locations` (Location metafields)
 - `read_markets` + `write_markets` (Market metafields)
-- `read_content` + `write_content` (Page, Blog, Article metafields)
-- `read_metaobjects_definitions` + `write_metaobjects_definitions` (Metaobject definitions)
+- `read_content` + `write_content` (Page/Blog/Article metafields)
 
-\*Company and Company Location metafields require a **Shopify Plus** store.
-
-### Specific Scopes by Resource Type
+> **💡 Tip**: Start with essential scopes and add others as needed for your specific metafield types.
 
 <details>
-<summary>Click to expand detailed scope requirements</summary>
+<summary>📋 Complete Scope Reference</summary>
 
-**Metaobjects:**
+| Resource Type | Read Scope | Write Scope |
+|---------------|------------|-------------|
+| Metaobjects | `read_metaobjects_definitions` | `write_metaobjects_definitions` |
+| Products/Variants/Collections | `read_products` | `write_products` |
+| Customers | `read_customers` | `write_customers` |
+| Orders | `read_orders` | `write_orders` |
+| Draft Orders | `read_draft_orders` | `write_draft_orders` |
+| Locations | `read_locations` | `write_locations` |
+| Markets | `read_markets` | `write_markets` |
+| Pages/Blogs/Articles | `read_content` | `write_content` |
+| Shop | *No additional scopes* | *No additional scopes* |
+| Company/Company Location* | `read_customers` | `write_customers` |
 
-- `read_metaobjects_definitions`
-- `write_metaobjects_definitions`
-
-**Product metafields:**
-
-- `read_products`
-- `write_products`
-
-**Variant metafields:**
-
-- `read_products`
-- `write_products`
-
-**Collection metafields:**
-
-- `read_products`
-- `write_products`
-
-**Customer metafields:**
-
-- `read_customers`
-- `write_customers`
-
-**Order metafields:**
-
-- `read_orders`
-- `write_orders`
-
-**Draft order metafields:**
-
-- `read_draft_orders`
-- `write_draft_orders`
-
-**Company metafields (Shopify Plus only):**
-
-- `read_customers`
-- `write_customers`
-
-**Company location metafields (Shopify Plus only):**
-
-- `read_customers`
-- `write_customers`
-
-**Location metafields:**
-
-- `read_locations`
-- `write_locations`
-
-**Page metafields:**
-
-- `read_content`
-- `write_content`
-
-**Blog metafields:**
-
-- `read_content`
-- `write_content`
-
-**Blog post metafields:**
-
-- `read_content`
-- `write_content`
-
-**Market metafields:**
-
-- `read_markets`
-- `write_markets`
-
-**Shop metafields:**
-
-- **No additional scopes required** (all apps have access to shop-level data by default)
+*Requires Shopify Plus
 
 </details>
 
-## Development
+## 🐛 Troubleshooting
 
-- **Language:** Node.js with ES modules
-- **CLI Framework:** Commander.js
-- **API Integration:** Custom GraphQL client for Shopify Admin API
-- **Testing:** Run `npm test` for basic functionality tests
+### Common Issues
 
-## Contributing
+**Authentication Errors:**
+- Verify store URLs and access tokens in `.env`
+- Check private app scopes match your metafield types
+- Ensure tokens have correct permissions
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Submit a pull request
+**Sync Failures:**
+- Use `--dry-run` to preview and identify issues
+- Check `--verbose` logs for detailed error information
+- Verify source definitions exist before copying
 
-## License
+**Performance:**
+- Large operations may take time - use `--verbose` for progress
+- Consider selective manifest copying instead of bulk operations
 
-MIT License - see LICENSE file for details.
-npm install
+### Error Analysis
 
-````
-3. Copy environment template:
-
-```bash
-cp .env.example .env
-````
-
-4. Configure your Shopify store tokens in `.env`:
-   ```env
-   STAGING_STORE_TOKEN=shpat_your_staging_token_here
-   PRODUCTION_STORE_TOKEN=shpat_your_production_token_here
-   ```
-
-## Setup Shopify Private Apps
-
-For each store, create a private app with the adequate scopes (see list above)
-
-## Usage
-
-### List Definitions
-
-List all metafield and metaobject definitions from a store:
+All operations provide detailed error logging:
 
 ```bash
-node src/cli.js list --store <store>
+# Save detailed logs
+npm run copy -- --from staging --to production --verbose --log sync.log
+
+# Review logs for issues
+cat sync.log
 ```
 
-Export to a file:
+## 🏗️ Development
 
-```bash
-node src/cli.js list --store <store> --output definitions.md
-```
-
-### Bulk Sync
-
-Delete all definitions from target and copy all from source:
-
-```bash
-node src/cli.js bulk --from <source-store> --to <target-store>
-```
-
-Preview changes without executing:
-
-```bash
-node src/cli.js bulk --from <source-store> --to <target-store> --dry-run
-```
-
-### Global Options
-
-- `--dry-run`: Preview changes without executing
-- `--verbose`: Detailed logging output
-- `--log <path>`: Save logs to file
-
-## Commands
-
-| Command  | Description                                                             | Status      |
-| -------- | ----------------------------------------------------------------------- | ----------- |
-| `list`   | List all metafield and metaobject definitions from a store              | ✅ Complete |
-| `copy`   | Copy selective definitions between stores using manifest files          | ✅ Complete |
-| `bulk`   | Delete all definitions from target store and copy all from source store | ✅ Complete |
-| `delete` | Delete selective definitions from a store using manifest files          | ✅ Complete |
-
-## Development Status
-
-✅ **Completed:**
-
-- ✅ Basic CLI structure with Commander.js framework
-- ✅ Environment configuration and store management
-- ✅ Shopify GraphQL Admin API client (2025-01)
-- ✅ **List command** with unified manifest-compatible markdown export
-- ✅ **Copy command** with manifest support for selective operations
-- ✅ **Bulk sync command** with complete store replication
-- ✅ **Delete command** with manifest support for selective cleanup
-- ✅ Comprehensive logging system with verbose/dry-run modes
-- ✅ **Unified manifest format** - list output directly usable as copy/delete input
-- ✅ **Metafield support** for all owner types (Product, Customer, Order, etc.)
-- ✅ **Metaobject support** with definition and entry management
-- ✅ **Access level mapping** and compatibility handling
-- ✅ **Error handling** with detailed GraphQL error reporting
-- ✅ **API scope documentation** with complete requirements
-- ✅ **End-to-end workflow** testing and validation
-
-🎯 **Current Status: Production Ready**
-
-All core functionality is implemented and tested. The tool supports:
-
-- Complete metafield/metaobject definition management
-- Selective operations via manifest files
-- Staging → Production deployment workflows
-- Safe dry-run previews and comprehensive logging
-
-📋 **Future Enhancements (Optional):**
-
-- 🔄 Rate limiting for large operations
-- 📊 Progress bars for bulk operations
-- 🔔 Interactive confirmation prompts
-- 📈 Operation statistics and reporting
-- 🔧 Configuration validation utilities
-- 📦 npm package publication
-
-## Project Structure
+### Project Structure
 
 ```
 meta-sync/
 ├── src/
-│   ├── cli.js              # Main CLI entry point
-│   ├── commands/           # Command implementations
-│   │   ├── bulk.js
-│   │   ├── list.js
-│   │   ├── copy.js
-│   │   └── delete.js
-│   ├── shopify/           # Shopify API client
-│   │   └── client.js
-│   ├── managers/          # Business logic managers
-│   └── utils/             # Utilities
-│       ├── config.js      # Configuration management
-│       └── logger.js      # Logging utilities
-├── .env.example           # Environment template
-└── package.json
+│   ├── cli.js                  # CLI entry point
+│   ├── commands/               # Command implementations
+│   │   ├── list.js            # List definitions
+│   │   ├── copy.js            # Copy definitions  
+│   │   ├── bulk.js            # Bulk sync
+│   │   └── delete.js          # Delete definitions
+│   ├── managers/
+│   │   └── definition.js      # Core business logic
+│   ├── shopify/
+│   │   └── client.js          # GraphQL API client
+│   └── utils/
+│       ├── config.js          # Configuration management
+│       ├── logger.js          # Logging utilities
+│       ├── manifest.js        # Manifest parsing
+│       ├── confirmation.js    # Interactive prompts
+│       └── command-base.js    # Base command class
+├── .env.example               # Environment template
+├── package.json               # Dependencies and scripts
+└── README.md                  # This file
 ```
 
-## Technical Details
+### Technical Stack
 
-### Delete Operation
+- **Runtime**: Node.js 18+ with ES modules
+- **CLI Framework**: Commander.js for argument parsing
+- **API Client**: Custom GraphQL client for Shopify Admin API 2025-01
+- **Architecture**: Command pattern with base classes and managers
 
-The `delete` command automatically handles associated metafield values:
+### Running Tests
 
-- **Automatic Cleanup**: When deleting metafield definitions, the tool uses Shopify's `deleteAllAssociatedMetafields: true` parameter
-- **No Manual Intervention**: You don't need to manually delete metafield values before deleting definitions
-- **Complete Removal**: All metafield values across all resources (products, orders, customers, etc.) are automatically removed
-- **Async Operation**: Shopify handles the value deletion asynchronously after the definition is removed
+```bash
+npm test
+```
 
-## Contributing
+## 🤝 Contributing
 
-This is a personal project, but feel free to suggest improvements!
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Make your changes with tests
+4. Commit: `git commit -m 'Add amazing feature'`
+5. Push: `git push origin feature/amazing-feature`
+6. Open a Pull Request
+
+## 📄 License
+
+MIT License - see [LICENSE](LICENSE) file for details.
+
+## 🆘 Support
+
+- 📖 Check this README for comprehensive usage examples
+- 🐛 Report issues on GitHub
+- 💡 Feature requests welcome
+
+---
+
+**Made with ❤️ for the Shopify development community**
