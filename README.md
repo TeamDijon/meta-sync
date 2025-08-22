@@ -45,7 +45,7 @@ Create a `.env` file with your Shopify private app credentials:
 STAGING_STORE_URL=my-staging-store.myshopify.com
 STAGING_ACCESS_TOKEN=shppa_xxxxxxxxxx
 
-PRODUCTION_STORE_URL=my-production-store.myshopify.com  
+PRODUCTION_STORE_URL=my-production-store.myshopify.com
 PRODUCTION_ACCESS_TOKEN=shppa_xxxxxxxxxx
 
 # Add as many stores as needed
@@ -54,6 +54,7 @@ DEV_ACCESS_TOKEN=shppa_xxxxxxxxxx
 ```
 
 > **💡 Store Mapping**: The `--store` parameter uses environment variable prefixes:
+>
 > - `--store staging` → `STAGING_STORE_URL` + `STAGING_ACCESS_TOKEN`
 > - `--store production` → `PRODUCTION_STORE_URL` + `PRODUCTION_ACCESS_TOKEN`
 
@@ -61,21 +62,21 @@ DEV_ACCESS_TOKEN=shppa_xxxxxxxxxx
 
 ### Core Commands
 
-| Command | Description | Safety Level |
-|---------|-------------|--------------|
-| `list` | Export all definitions to manifest | ✅ Safe |
-| `copy` | Copy selective definitions | ⚠️ Modify target |
-| `bulk` | Complete store sync (delete + copy) | 🚨 Destructive |
-| `delete` | Remove selective/all definitions | 🚨 Destructive |
+| Command  | Description                         | Safety Level     |
+| -------- | ----------------------------------- | ---------------- |
+| `list`   | Export all definitions to manifest  | ✅ Safe          |
+| `copy`   | Copy selective definitions          | ⚠️ Modify target |
+| `bulk`   | Complete store sync (delete + copy) | 🚨 Destructive   |
+| `delete` | Remove selective/all definitions    | 🚨 Destructive   |
 
 ### Global Options
 
-| Option | Description |
-|--------|-------------|
-| `--dry-run` | Preview changes without execution |
-| `--verbose` | Detailed logging output |
-| `--log <path>` | Save logs to file |
-| `--yes` | Skip confirmation prompts (automation) |
+| Option         | Description                            |
+| -------------- | -------------------------------------- |
+| `--dry-run`    | Preview changes without execution      |
+| `--verbose`    | Detailed logging output                |
+| `--log <path>` | Save logs to file                      |
+| `--yes`        | Skip confirmation prompts (automation) |
 
 ## 🛠️ Usage
 
@@ -93,7 +94,7 @@ npm run copy -- --from <source> --to <target> --manifest manifest.md --dry-run
 # Bulk sync (destructive)
 npm run bulk -- --from <source> --to <target> --verbose
 
-# Delete with confirmation  
+# Delete with confirmation
 npm run delete -- --store <target> --manifest cleanup.md
 ```
 
@@ -111,24 +112,28 @@ The tool uses a **unified manifest format** where `list` output is directly comp
 
 ```markdown
 # Store Definitions: staging
+
 Generated: 2025-08-22T14:00:00.000Z
 Found 25 metafield definitions and 3 metaobject definitions.
 
 ## Metafields
 
 ### product.specs.weight
+
 - **Type:** number_decimal
-- **Owner:** PRODUCT  
+- **Owner:** PRODUCT
 - **Description:** Product weight in kg
 
 ### collection.seo.featured_image
+
 - **Type:** file_reference
 - **Owner:** COLLECTION
 - **Description:** Featured image for SEO
 
 ## Metaobjects
 
-### recipe  
+### recipe
+
 - **Name:** Recipe
 - **Description:** Recipe with ingredients and instructions
 - **Fields:**
@@ -141,7 +146,7 @@ Found 25 metafield definitions and 3 metaobject definitions.
 ### Manifest Rules
 
 - **Headers**: Use `## Metafields` and `## Metaobjects`
-- **Metafields**: Define as `### namespace.key` 
+- **Metafields**: Define as `### namespace.key`
 - **Metaobjects**: Define as `### type`
 - **Parsing**: Only `###` headers are parsed - other content is informational
 
@@ -195,7 +200,7 @@ npm run delete -- --store production --manifest cleanup.md
 npm run copy -- --from dev --to staging --dry-run
 npm run copy -- --from dev --to staging
 
-npm run copy -- --from staging --to production --dry-run  
+npm run copy -- --from staging --to production --dry-run
 npm run copy -- --from staging --to production
 ```
 
@@ -241,11 +246,13 @@ npm run bulk -- --from staging --to production --dry-run --verbose
 For complete functionality, configure private apps with these scopes:
 
 **Essential Scopes:**
+
 - `read_metaobjects_definitions` + `write_metaobjects_definitions`
 - `read_products` + `write_products` (Product/Variant/Collection metafields)
 - `read_customers` + `write_customers` (Customer metafields)
 
 **Additional Resource Scopes:**
+
 - `read_orders` + `write_orders` (Order metafields)
 - `read_draft_orders` + `write_draft_orders` (Draft order metafields)
 - `read_locations` + `write_locations` (Location metafields)
@@ -257,20 +264,20 @@ For complete functionality, configure private apps with these scopes:
 <details>
 <summary>📋 Complete Scope Reference</summary>
 
-| Resource Type | Read Scope | Write Scope |
-|---------------|------------|-------------|
-| Metaobjects | `read_metaobjects_definitions` | `write_metaobjects_definitions` |
-| Products/Variants/Collections | `read_products` | `write_products` |
-| Customers | `read_customers` | `write_customers` |
-| Orders | `read_orders` | `write_orders` |
-| Draft Orders | `read_draft_orders` | `write_draft_orders` |
-| Locations | `read_locations` | `write_locations` |
-| Markets | `read_markets` | `write_markets` |
-| Pages/Blogs/Articles | `read_content` | `write_content` |
-| Shop | *No additional scopes* | *No additional scopes* |
-| Company/Company Location* | `read_customers` | `write_customers` |
+| Resource Type                 | Read Scope                     | Write Scope                     |
+| ----------------------------- | ------------------------------ | ------------------------------- |
+| Metaobjects                   | `read_metaobjects_definitions` | `write_metaobjects_definitions` |
+| Products/Variants/Collections | `read_products`                | `write_products`                |
+| Customers                     | `read_customers`               | `write_customers`               |
+| Orders                        | `read_orders`                  | `write_orders`                  |
+| Draft Orders                  | `read_draft_orders`            | `write_draft_orders`            |
+| Locations                     | `read_locations`               | `write_locations`               |
+| Markets                       | `read_markets`                 | `write_markets`                 |
+| Pages/Blogs/Articles          | `read_content`                 | `write_content`                 |
+| Shop                          | _No additional scopes_         | _No additional scopes_          |
+| Company/Company Location\*    | `read_customers`               | `write_customers`               |
 
-*Requires Shopify Plus
+\*Requires Shopify Plus
 
 </details>
 
@@ -279,16 +286,19 @@ For complete functionality, configure private apps with these scopes:
 ### Common Issues
 
 **Authentication Errors:**
+
 - Verify store URLs and access tokens in `.env`
 - Check private app scopes match your metafield types
 - Ensure tokens have correct permissions
 
 **Sync Failures:**
+
 - Use `--dry-run` to preview and identify issues
 - Check `--verbose` logs for detailed error information
 - Verify source definitions exist before copying
 
 **Performance:**
+
 - Large operations may take time - use `--verbose` for progress
 - Consider selective manifest copying instead of bulk operations
 
@@ -314,7 +324,7 @@ meta-sync/
 │   ├── cli.js                  # CLI entry point
 │   ├── commands/               # Command implementations
 │   │   ├── list.js            # List definitions
-│   │   ├── copy.js            # Copy definitions  
+│   │   ├── copy.js            # Copy definitions
 │   │   ├── bulk.js            # Bulk sync
 │   │   └── delete.js          # Delete definitions
 │   ├── managers/

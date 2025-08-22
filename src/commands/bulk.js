@@ -39,30 +39,55 @@ const bulkCommand = new Command('bulk')
         metaobjects: targetMetaobjectDefs,
       } = await targetManager.getAllDefinitions();
 
-      ctx.logger.info('Current state:', {
+      // Filter reserved definitions from source
+      const filteredSourceDefinitions = ctx.filterReservedDefinitions(
+        sourceManager,
+        {
+          metafields: sourceMetafieldDefs,
+          metaobjects: sourceMetaobjectDefs,
+        },
+        'copy'
+      );
+
+      // Filter reserved definitions from target for deletion
+      const filteredTargetDefinitions = ctx.filterReservedDefinitions(
+        targetManager,
+        {
+          metafields: targetMetafieldDefs,
+          metaobjects: targetMetaobjectDefs,
+        },
+        'delete'
+      );
+
+      // Exit if no definitions to process
+      if (!filteredSourceDefinitions || !filteredTargetDefinitions) {
+        return;
+      }
+
+      ctx.logger.info('Current state (after filtering):', {
         source: {
-          metafields: sourceMetafieldDefs.length,
-          metaobjects: sourceMetaobjectDefs.length,
+          metafields: filteredSourceDefinitions.metafields.length,
+          metaobjects: filteredSourceDefinitions.metaobjects.length,
         },
         target: {
-          metafields: targetMetafieldDefs.length,
-          metaobjects: targetMetaobjectDefs.length,
+          metafields: filteredTargetDefinitions.metafields.length,
+          metaobjects: filteredTargetDefinitions.metaobjects.length,
         },
       });
 
       if (ctx.globalOpts.dryRun) {
         ctx.logger.dryRunInfo('DRY RUN - No actual changes will be made');
         ctx.logger.dryRunInfo(
-          `Would delete ${targetMetafieldDefs.length} metafield definitions from ${options.to}`
+          `Would delete ${filteredTargetDefinitions.metafields.length} metafield definitions from ${options.to}`
         );
         ctx.logger.dryRunInfo(
-          `Would delete ${targetMetaobjectDefs.length} metaobject definitions from ${options.to}`
+          `Would delete ${filteredTargetDefinitions.metaobjects.length} metaobject definitions from ${options.to}`
         );
         ctx.logger.dryRunInfo(
-          `Would copy ${sourceMetaobjectDefs.length} metaobject definitions from ${options.from} (with dependency resolution)`
+          `Would copy ${filteredSourceDefinitions.metaobjects.length} metaobject definitions from ${options.from} (with dependency resolution)`
         );
         ctx.logger.dryRunInfo(
-          `Would copy ${sourceMetafieldDefs.length} metafield definitions from ${options.from}`
+          `Would copy ${filteredSourceDefinitions.metafields.length} metafield definitions from ${options.from}`
         );
         return;
       }
@@ -72,16 +97,21 @@ const bulkCommand = new Command('bulk')
         operation: 'Bulk Sync (Delete All + Copy All)',
         target: `${options.to} store`,
         impact: {
-          metafields: targetMetafieldDefs.length + sourceMetafieldDefs.length,
+          metafields:
+            filteredTargetDefinitions.metafields.length +
+            filteredSourceDefinitions.metafields.length,
           metaobjects:
-            targetMetaobjectDefs.length + sourceMetaobjectDefs.length,
+            filteredTargetDefinitions.metaobjects.length +
+            filteredSourceDefinitions.metaobjects.length,
         },
         details: [
-          `Will DELETE all ${
-            targetMetafieldDefs.length + targetMetaobjectDefs.length
+          `Will DELETE ${
+            filteredTargetDefinitions.metafields.length +
+            filteredTargetDefinitions.metaobjects.length
           } definitions from ${options.to}`,
-          `Will COPY all ${
-            sourceMetafieldDefs.length + sourceMetaobjectDefs.length
+          `Will COPY ${
+            filteredSourceDefinitions.metafields.length +
+            filteredSourceDefinitions.metaobjects.length
           } definitions from ${options.from}`,
           'This completely replaces the target store definitions',
         ],
@@ -94,12 +124,14 @@ const bulkCommand = new Command('bulk')
       }
 
       // Phase 1: Delete all from target
-      if (targetMetafieldDefs.length > 0 || targetMetaobjectDefs.length > 0) {
+      if (
+        filteredTargetDefinitions.metafields.length > 0 ||
+        filteredTargetDefinitions.metaobjects.length > 0
+      ) {
         ctx.logger.info('Deleting all definitions from target store...');
-        const deleteResults = await targetManager.deleteDefinitions({
-          metafields: targetMetafieldDefs,
-          metaobjects: targetMetaobjectDefs,
-        });
+        const deleteResults = await targetManager.deleteDefinitions(
+          filteredTargetDefinitions
+        );
 
         ctx.logger.info('Deleted definitions:', {
           metafields: deleteResults.metafields.success,
@@ -112,10 +144,9 @@ const bulkCommand = new Command('bulk')
 
       // Phase 2: Copy all from source (with dependency resolution)
       ctx.logger.info('Copying all definitions from source to target...');
-      const copyResults = await targetManager.copyDefinitionsWithDependencies({
-        metafields: sourceMetafieldDefs,
-        metaobjects: sourceMetaobjectDefs,
-      });
+      const copyResults = await targetManager.copyDefinitionsWithDependencies(
+        filteredSourceDefinitions
+      );
 
       const totalCopied =
         copyResults.metafields.success + copyResults.metaobjects.success;
@@ -136,8 +167,8 @@ const bulkCommand = new Command('bulk')
           total: totalCopied,
         },
         deleted: {
-          metafields: targetMetafieldDefs.length,
-          metaobjects: targetMetaobjectDefs.length,
+          metafields: filteredTargetDefinitions.metafields.length,
+          metaobjects: filteredTargetDefinitions.metaobjects.length,
         },
         errors: totalErrors,
       };

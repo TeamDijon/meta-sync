@@ -5,6 +5,8 @@ import {
   MAX_DEPENDENCY_PASSES,
   PASS_DELAY_MS,
   CREATION_DELAY_MS,
+  isReservedMetafieldNamespace,
+  isReservedMetaobjectType,
 } from '../utils/constants.js';
 
 export class DefinitionManager {
@@ -78,6 +80,55 @@ export class DefinitionManager {
     }
 
     return results;
+  }
+
+  /**
+   * Filter out reserved Shopify definitions and log them
+   * @param {Object} definitions - Object with metafields and metaobjects arrays
+   * @returns {Object} - Filtered definitions object with stats
+   */
+  filterReservedDefinitions(definitions) {
+    const filtered = { metafields: [], metaobjects: [] };
+    const skipped = { metafields: [], metaobjects: [] };
+
+    // Filter metafields
+    for (const metafield of definitions.metafields || []) {
+      if (isReservedMetafieldNamespace(metafield.namespace)) {
+        skipped.metafields.push({
+          key: `${metafield.namespace}/${metafield.key}`,
+          reason: `Reserved namespace: ${metafield.namespace}`,
+        });
+        this.logger.warning(
+          `Skipping reserved metafield: ${metafield.namespace}/${metafield.key} (reserved namespace)`
+        );
+      } else {
+        filtered.metafields.push(metafield);
+      }
+    }
+
+    // Filter metaobjects
+    for (const metaobject of definitions.metaobjects || []) {
+      if (isReservedMetaobjectType(metaobject.type)) {
+        skipped.metaobjects.push({
+          type: metaobject.type,
+          reason: `Reserved type prefix: ${metaobject.type}`,
+        });
+        this.logger.warning(
+          `Skipping reserved metaobject: ${metaobject.type} (reserved type prefix)`
+        );
+      } else {
+        filtered.metaobjects.push(metaobject);
+      }
+    }
+
+    // Log summary if any were skipped
+    if (skipped.metafields.length > 0 || skipped.metaobjects.length > 0) {
+      this.logger.info(
+        `Skipped ${skipped.metafields.length} reserved metafields and ${skipped.metaobjects.length} reserved metaobjects`
+      );
+    }
+
+    return { filtered, skipped };
   }
 
   async getAllDefinitions() {
@@ -246,6 +297,9 @@ export class DefinitionManager {
   }
 
   async copyDefinitionsWithDependencies(definitions, dryRun = false) {
+    // Filter out reserved definitions
+    const { filtered, skipped } = this.filterReservedDefinitions(definitions);
+
     const results = {
       metafields: { success: 0, errors: [] },
       metaobjects: { success: 0, errors: [] },
@@ -253,10 +307,10 @@ export class DefinitionManager {
 
     if (dryRun) {
       this.logger.dryRunInfo(
-        `Would copy ${definitions.metafields.length} metafield definitions`
+        `Would copy ${filtered.metafields.length} metafield definitions`
       );
       this.logger.dryRunInfo(
-        `Would copy ${definitions.metaobjects.length} metaobject definitions`
+        `Would copy ${filtered.metaobjects.length} metaobject definitions`
       );
       return results;
     }
@@ -265,7 +319,7 @@ export class DefinitionManager {
     const metaobjectIdMapping = new Map();
 
     // Copy metaobject definitions first with multi-pass retry for dependencies
-    let pendingMetaobjects = [...definitions.metaobjects];
+    let pendingMetaobjects = [...filtered.metaobjects];
     let pass = 0;
 
     while (pendingMetaobjects.length > 0 && pass < MAX_DEPENDENCY_PASSES) {
@@ -300,7 +354,7 @@ export class DefinitionManager {
           const isDependencyError = this.isDependencyError(error.message);
 
           if (isDependencyError && pass < MAX_DEPENDENCY_PASSES) {
-            this.logger.warn(
+            this.logger.warning(
               `Pass ${pass}: Metaobject ${def.type} depends on another metaobject, will retry in next pass`
             );
             stillPending.push(def);
@@ -344,7 +398,7 @@ export class DefinitionManager {
 
     // Copy metafield definitions second (after metaobjects exist and can be referenced)
     const metafieldResults = await this.processDefinitions(
-      { metafields: definitions.metafields, metaobjects: [] },
+      { metafields: filtered.metafields, metaobjects: [] },
       {
         name: 'copy',
         metafield: async (def) => this.createMetafieldDefinition(def),
@@ -399,8 +453,11 @@ export class DefinitionManager {
   }
 
   async deleteDefinitions(definitions, dryRun = false) {
+    // Filter out reserved definitions
+    const { filtered, skipped } = this.filterReservedDefinitions(definitions);
+
     return this.processDefinitions(
-      definitions,
+      filtered,
       {
         name: 'delete',
         metafield: async (def) => this.deleteMetafieldDefinition(def),

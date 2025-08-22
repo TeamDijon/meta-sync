@@ -69,11 +69,13 @@ class DeleteCommand extends CommandHandler {
       );
     }
 
-    if (
-      definitionsToDelete.metafields.length === 0 &&
-      definitionsToDelete.metaobjects.length === 0
-    ) {
-      this.logger.warning('No definitions to delete!');
+    // Filter out reserved definitions before processing
+    definitionsToDelete = this.filterReservedDefinitions(
+      manager,
+      definitionsToDelete,
+      'delete'
+    );
+    if (!definitionsToDelete) {
       return;
     }
 

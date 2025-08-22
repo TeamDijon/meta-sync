@@ -1,6 +1,10 @@
 import { createShopifyClient, validateStoreNames } from './config.js';
 import { createLogger } from './logger.js';
 import { DefinitionManager } from '../managers/definition.js';
+import {
+  isReservedMetafieldNamespace,
+  isReservedMetaobjectType,
+} from './constants.js';
 
 /**
  * Base command handler that provides common functionality for all commands
@@ -23,6 +27,67 @@ export class CommandHandler {
       logFile: this.globalOpts.log,
       dryRun: this.globalOpts.dryRun,
     });
+  }
+
+  /**
+   * Filter reserved definitions with consistent logging
+   * @param {Object} manager - The DefinitionManager instance
+   * @param {Object} definitions - The definitions to filter
+   * @param {string} operation - Operation name for logging context
+   * @returns {Object} - The filtered definitions or null if empty
+   */
+  filterReservedDefinitions(manager, definitions, operation = 'process') {
+    this.logger.info('Filtering reserved Shopify definitions...');
+    const { filtered, skipped } =
+      manager.filterReservedDefinitions(definitions);
+
+    // Check if we have any definitions left after filtering
+    if (filtered.metafields.length === 0 && filtered.metaobjects.length === 0) {
+      this.logger.warning(`No definitions to ${operation}!`);
+      return null;
+    }
+
+    return filtered;
+  }
+
+  /**
+   * Check if definitions object is empty
+   * @param {Object} definitions - The definitions object
+   * @param {string} operation - Operation name for warning message
+   * @returns {boolean} - True if empty
+   */
+  isDefinitionsEmpty(definitions, operation = 'process') {
+    const isEmpty =
+      definitions.metafields.length === 0 &&
+      definitions.metaobjects.length === 0;
+    if (isEmpty) {
+      this.logger.warning(`No definitions to ${operation}!`);
+    }
+    return isEmpty;
+  }
+
+  /**
+   * Count reserved definitions in a definitions object
+   * @param {Object} definitions - Object with metafields and metaobjects arrays
+   * @returns {Object} - Counts of reserved definitions
+   */
+  countReservedDefinitions(definitions) {
+    const reservedMetafields = (definitions.metafields || []).filter((def) =>
+      isReservedMetafieldNamespace(def.namespace)
+    );
+    const reservedMetaobjects = (definitions.metaobjects || []).filter((def) =>
+      isReservedMetaobjectType(def.type)
+    );
+
+    return {
+      metafields: reservedMetafields,
+      metaobjects: reservedMetaobjects,
+      counts: {
+        metafields: reservedMetafields.length,
+        metaobjects: reservedMetaobjects.length,
+        total: reservedMetafields.length + reservedMetaobjects.length,
+      },
+    };
   }
 
   // New pattern: for class-based commands

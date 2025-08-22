@@ -73,11 +73,13 @@ const copyCommand = new Command('copy')
         });
       }
 
-      if (
-        definitionsToCopy.metafields.length === 0 &&
-        definitionsToCopy.metaobjects.length === 0
-      ) {
-        ctx.logger.warning('No definitions to copy!');
+      // Filter out reserved definitions before processing
+      definitionsToCopy = ctx.filterReservedDefinitions(
+        sourceManager,
+        definitionsToCopy,
+        'copy'
+      );
+      if (!definitionsToCopy) {
         return;
       }
 

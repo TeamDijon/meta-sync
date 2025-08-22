@@ -1,6 +1,10 @@
 import { Command } from 'commander';
 import { writeFileSync } from 'fs';
 import { CommandHandler } from '../utils/command-base.js';
+import {
+  isReservedMetafieldNamespace,
+  isReservedMetaobjectType,
+} from '../utils/constants.js';
 
 class ListCommand extends CommandHandler {
   async execute(options) {
@@ -42,10 +46,24 @@ class ListCommand extends CommandHandler {
     });
   }
 
-  generateMarkdownReport(metafieldDefinitions, metaobjectDefinitions, storeName) {
+  generateMarkdownReport(
+    metafieldDefinitions,
+    metaobjectDefinitions,
+    storeName
+  ) {
+    // Count reserved definitions using the common utility
+    const reserved = this.countReservedDefinitions({
+      metafields: metafieldDefinitions,
+      metaobjects: metaobjectDefinitions,
+    });
+
     let report = `# Store Definitions: ${storeName}\n\n`;
     report += `Generated: ${new Date().toISOString()}\n\n`;
     report += `Found ${metafieldDefinitions.length} metafield definitions and ${metaobjectDefinitions.length} metaobject definitions.\n\n`;
+
+    if (reserved.counts.total > 0) {
+      report += `**⚠️ Reserved Definitions:** ${reserved.counts.metafields} metafields and ${reserved.counts.metaobjects} metaobjects are reserved by Shopify and cannot be modified by third-party apps.\n\n`;
+    }
 
     report += `## Metafields\n\n`;
 
@@ -57,7 +75,10 @@ class ListCommand extends CommandHandler {
     });
 
     for (const def of sortedMetafields) {
-      report += `### ${def.namespace}.${def.key}\n\n`;
+      const isReserved = isReservedMetafieldNamespace(def.namespace);
+      report += `### ${def.namespace}.${def.key}${
+        isReserved ? ' ⚠️ RESERVED' : ''
+      }\n\n`;
       report += `- **Type:** ${def.type.name}\n`;
       report += `- **Owner:** ${def.ownerType}\n`;
       if (def.description) {
@@ -68,6 +89,9 @@ class ListCommand extends CommandHandler {
         report += `- **Validations:** ${def.validations
           .map((v) => `${v.name}=${v.value}`)
           .join(', ')}\n`;
+      }
+      if (isReserved) {
+        report += `- **⚠️ Note:** This is a reserved Shopify definition and cannot be modified by third-party apps\n`;
       }
       report += '\n';
     }
@@ -80,7 +104,8 @@ class ListCommand extends CommandHandler {
     );
 
     for (const def of sortedMetaobjects) {
-      report += `### ${def.type}\n\n`;
+      const isReserved = isReservedMetaobjectType(def.type);
+      report += `### ${def.type}${isReserved ? ' ⚠️ RESERVED' : ''}\n\n`;
       report += `- **Name:** ${def.name}\n`;
       if (def.description) {
         report += `- **Description:** ${def.description}\n`;
@@ -101,11 +126,16 @@ class ListCommand extends CommandHandler {
       report += `- **Access:** Admin=${def.access.admin}, Storefront=${def.access.storefront}\n`;
 
       const capabilities = [];
-      if (def.capabilities.publishable?.enabled) capabilities.push('publishable');
+      if (def.capabilities.publishable?.enabled)
+        capabilities.push('publishable');
       if (def.capabilities.translatable?.enabled)
         capabilities.push('translatable');
       if (capabilities.length > 0) {
         report += `- **Capabilities:** ${capabilities.join(', ')}\n`;
+      }
+
+      if (isReserved) {
+        report += `- **⚠️ Note:** This is a reserved Shopify definition and cannot be modified by third-party apps\n`;
       }
 
       report += '\n';
