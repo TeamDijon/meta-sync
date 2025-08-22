@@ -36,6 +36,12 @@ DEVELOPMENT_STORE_URL=dev-store.myshopify.com
 DEVELOPMENT_ACCESS_TOKEN=shppa_xxxxxxxxxx
 ```
 
+**Store Names:** The `--store` parameter uses the prefix from your environment variables. For example:
+
+- `--store staging` uses `STAGING_STORE_URL` and `STAGING_ACCESS_TOKEN`
+- `--store production` uses `PRODUCTION_STORE_URL` and `PRODUCTION_ACCESS_TOKEN`
+- `--store development` uses `DEVELOPMENT_STORE_URL` and `DEVELOPMENT_ACCESS_TOKEN`
+
 ## Usage
 
 ### NPM Scripts (Recommended)
@@ -47,16 +53,16 @@ For convenience, you can use npm scripts instead of the full `node src/cli.js` c
 npm run help
 
 # List definitions
-npm run list -- --store staging --output definitions.md
+npm run list -- --store <store> --output definitions.md
 
 # Copy definitions
-npm run copy -- --from staging --to production --manifest manifest.md
+npm run copy -- --from <source-store> --to <target-store> --manifest manifest.md
 
 # Bulk sync
-npm run bulk -- --from staging --to production --dry-run
+npm run bulk -- --from <source-store> --to <target-store> --dry-run
 
 # Delete definitions
-npm run delete -- --store staging --manifest cleanup.md
+npm run delete -- --store <store> --manifest cleanup.md
 ```
 
 **Note:** Use `--` to pass arguments through npm to the underlying command.
@@ -67,7 +73,7 @@ You can also use the CLI directly:
 
 ```bash
 node src/cli.js --help
-node src/cli.js list --store staging
+node src/cli.js list --store <store>
 # ... etc
 ```
 
@@ -88,14 +94,14 @@ List and optionally export all metafield/metaobject definitions from a store:
 
 ```bash
 # Using npm scripts (recommended)
-npm run list -- --store staging
-npm run list -- --store staging --output definitions.md
-npm run list -- --store staging --verbose
+npm run list -- --store <store>
+npm run list -- --store <store> --output definitions.md
+npm run list -- --store <store> --verbose
 
 # Direct CLI usage
-node src/cli.js list --store staging
-node src/cli.js list --store staging --output definitions.md
-node src/cli.js list --store staging --verbose
+node src/cli.js list --store <store>
+node src/cli.js list --store <store> --output definitions.md
+node src/cli.js list --store <store> --verbose
 ```
 
 #### 2. Copy Definitions
@@ -104,14 +110,14 @@ Copy specific definitions between stores using manifest files:
 
 ```bash
 # Using npm scripts (recommended)
-npm run copy -- --from staging --to production
-npm run copy -- --from staging --to production --manifest manifest.md
-npm run copy -- --from staging --to production --manifest manifest.md --dry-run
+npm run copy -- --from <source-store> --to <target-store>
+npm run copy -- --from <source-store> --to <target-store> --manifest manifest.md
+npm run copy -- --from <source-store> --to <target-store> --manifest manifest.md --dry-run
 
 # Direct CLI usage
-node src/cli.js copy --from staging --to production
-node src/cli.js copy --from staging --to production --manifest manifest.md
-node src/cli.js copy --from staging --to production --manifest manifest.md --dry-run
+node src/cli.js copy --from <source-store> --to <target-store>
+node src/cli.js copy --from <source-store> --to <target-store> --manifest manifest.md
+node src/cli.js copy --from <source-store> --to <target-store> --manifest manifest.md --dry-run
 ```
 
 #### 3. Bulk Sync
@@ -120,14 +126,14 @@ Complete store synchronization (delete all + copy all):
 
 ```bash
 # Using npm scripts (recommended)
-npm run bulk -- --from staging --to production
-npm run bulk -- --from staging --to production --dry-run
-npm run bulk -- --from staging --to production --verbose
+npm run bulk -- --from <source-store> --to <target-store>
+npm run bulk -- --from <source-store> --to <target-store> --dry-run
+npm run bulk -- --from <source-store> --to <target-store> --verbose
 
 # Direct CLI usage
-node src/cli.js bulk --from staging --to production
-node src/cli.js bulk --from staging --to production --dry-run
-node src/cli.js bulk --from staging --to production --verbose
+node src/cli.js bulk --from <source-store> --to <target-store>
+node src/cli.js bulk --from <source-store> --to <target-store> --dry-run
+node src/cli.js bulk --from <source-store> --to <target-store> --verbose
 ```
 
 #### 4. Delete Definitions
@@ -136,14 +142,34 @@ Delete definitions from a store:
 
 ```bash
 # Using npm scripts (recommended)
-npm run delete -- --store staging --manifest cleanup.md
-npm run delete -- --store staging
-npm run delete -- --store staging --manifest cleanup.md --dry-run
+npm run delete -- --store <store> --manifest cleanup.md
+npm run delete -- --store <store>
+npm run delete -- --store <store> --manifest cleanup.md --dry-run
 
 # Direct CLI usage
-node src/cli.js delete --store staging --manifest cleanup.md
-node src/cli.js delete --store staging
-node src/cli.js delete --store staging --manifest cleanup.md --dry-run
+node src/cli.js delete --store <store> --manifest cleanup.md
+node src/cli.js delete --store <store>
+node src/cli.js delete --store <store> --manifest cleanup.md --dry-run
+
+# Skip confirmation prompt (for automation)
+npm run delete -- --store <store> --manifest cleanup.md --yes
+```
+
+**Interactive Confirmation:**
+
+- Delete operations require interactive confirmation before proceeding
+- Shows detailed impact: number of metafields/metaobjects, target store, operation details
+- Use `--yes` flag to skip confirmation for automation/CI environments
+- Dry-run operations automatically skip confirmation
+
+**Bulk operations also require confirmation:**
+
+```bash
+# Bulk sync with confirmation
+npm run bulk -- --from <source-store> --to <target-store>
+
+# Skip confirmation for automation
+npm run bulk -- --from <source-store> --to <target-store> --yes
 ```
 
 ## Unified Manifest Format
@@ -212,13 +238,13 @@ The above format can be used directly as input for `copy` and `delete` commands:
 
 ```bash
 # Save list output to file
-node src/cli.js list --store staging > definitions.md
+node src/cli.js list --store <store> > definitions.md
 
 # Edit the file to remove unwanted definitions
 # (remove entire sections from ### header to next ### header)
 
 # Use edited file directly with copy command
-node src/cli.js copy --from staging --to production --manifest definitions.md
+node src/cli.js copy --from <source-store> --to <target-store> --manifest definitions.md
 ```
 
 ### Manifest Rules
@@ -233,16 +259,16 @@ node src/cli.js copy --from staging --to production --manifest definitions.md
 
 ### Typical Workflow
 
-1. **Review staging definitions:**
+1. **Review source store definitions:**
 
    ```bash
-   node src/cli.js list --store staging --output staging-review.md
+   node src/cli.js list --store <source-store> --output review.md
    ```
 
 2. **Create a selective manifest (or edit the list output directly):**
 
    ```markdown
-   # Production Deployment - Sprint 23
+   # Store Migration - Sprint 23
 
    Generated: 2025-08-22T14:00:00.000Z
 
@@ -278,29 +304,29 @@ node src/cli.js copy --from staging --to production --manifest definitions.md
 3. **Preview the sync:**
 
    ```bash
-   node src/cli.js copy --from staging --to production --manifest deploy-manifest.md --dry-run --verbose
+   node src/cli.js copy --from <source-store> --to <target-store> --manifest deploy-manifest.md --dry-run --verbose
    ```
 
 4. **Execute the sync:**
    ```bash
-   node src/cli.js copy --from staging --to production --manifest deploy-manifest.md --verbose
+   node src/cli.js copy --from <source-store> --to <target-store> --manifest deploy-manifest.md --verbose
    ```
 
 ### Emergency Cleanup
 
 ```bash
 # Delete problematic definitions
-node src/cli.js delete --store production --manifest cleanup-manifest.md --dry-run
+node src/cli.js delete --store <store> --manifest cleanup-manifest.md --dry-run
 
 # Full store reset (dangerous!)
-node src/cli.js delete --store staging --dry-run
+node src/cli.js delete --store <store> --dry-run
 ```
 
 ### Complete Store Migration
 
 ```bash
-# Full sync from staging to production
-node src/cli.js bulk --from staging --to production --dry-run --verbose
+# Full sync from source to target store
+node src/cli.js bulk --from <source-store> --to <target-store> --dry-run --verbose
 ```
 
 ## Error Handling
@@ -457,13 +483,13 @@ For each store, create a private app with the adequate scopes (see list above)
 List all metafield and metaobject definitions from a store:
 
 ```bash
-node src/cli.js list --store staging
+node src/cli.js list --store <store>
 ```
 
 Export to a file:
 
 ```bash
-node src/cli.js list --store staging --output definitions.md
+node src/cli.js list --store <store> --output definitions.md
 ```
 
 ### Bulk Sync
@@ -471,13 +497,13 @@ node src/cli.js list --store staging --output definitions.md
 Delete all definitions from target and copy all from source:
 
 ```bash
-node src/cli.js bulk --from staging --to production
+node src/cli.js bulk --from <source-store> --to <target-store>
 ```
 
 Preview changes without executing:
 
 ```bash
-node src/cli.js bulk --from staging --to production --dry-run
+node src/cli.js bulk --from <source-store> --to <target-store> --dry-run
 ```
 
 ### Global Options

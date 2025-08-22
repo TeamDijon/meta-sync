@@ -1,6 +1,7 @@
 import { Command } from 'commander';
 import { CommandHandler } from '../utils/command-base.js';
 import { ManifestParser } from '../utils/manifest.js';
+import { ConfirmationPrompt } from '../utils/confirmation.js';
 
 class DeleteCommand extends CommandHandler {
   async execute(options) {
@@ -112,12 +113,28 @@ class DeleteCommand extends CommandHandler {
       return;
     }
 
+    // Interactive confirmation before proceeding with destructive operation
+    const details = [];
     if (!manifest) {
-      this.logger.warning(
-        '⚠️  WARNING: You are about to delete ALL definitions from the store!'
-      );
-      this.logger.warning('⚠️  This action cannot be undone!');
-      // TODO: Add interactive confirmation in future
+      details.push('ALL definitions will be deleted (no manifest specified)');
+    } else {
+      details.push(`Definitions specified in manifest: ${manifest}`);
+    }
+
+    const confirmed = await ConfirmationPrompt.confirm({
+      operation: 'Delete Definitions',
+      target: `${store} store`,
+      impact: {
+        metafields: definitionsToDelete.metafields.length,
+        metaobjects: definitionsToDelete.metaobjects.length,
+      },
+      details,
+      skipConfirmation: options.yes, // Skip if --yes flag provided
+    });
+
+    if (!confirmed) {
+      this.logger.info('Operation cancelled by user.');
+      return;
     }
 
     // Perform deletions
@@ -154,6 +171,7 @@ const deleteCommand = new Command('delete')
     '--manifest <file>',
     'Manifest file specifying which definitions to delete'
   )
+  .option('--yes', 'Skip confirmation prompt (use with caution!)')
   .action(async (options, command) => {
     const handler = new DeleteCommand(command.parent.opts());
     await handler.run(options);

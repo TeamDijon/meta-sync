@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import { CommandHandler } from '../utils/command-base.js';
+import { ConfirmationPrompt } from '../utils/confirmation.js';
 
 const bulkCommand = new Command('bulk')
   .description(
@@ -7,6 +8,7 @@ const bulkCommand = new Command('bulk')
   )
   .requiredOption('--from <store>', 'Source store name (e.g., staging)')
   .requiredOption('--to <store>', 'Target store name (e.g., production)')
+  .option('--yes', 'Skip confirmation prompt (use with caution!)')
   .action(async (options, command) => {
     const handler = new CommandHandler(
       'Bulk Sync',
@@ -65,14 +67,34 @@ const bulkCommand = new Command('bulk')
         return;
       }
 
+      // Interactive confirmation before proceeding with destructive bulk operation
+      const confirmed = await ConfirmationPrompt.confirm({
+        operation: 'Bulk Sync (Delete All + Copy All)',
+        target: `${options.to} store`,
+        impact: {
+          metafields: targetMetafieldDefs.length + sourceMetafieldDefs.length,
+          metaobjects:
+            targetMetaobjectDefs.length + sourceMetaobjectDefs.length,
+        },
+        details: [
+          `Will DELETE all ${
+            targetMetafieldDefs.length + targetMetaobjectDefs.length
+          } definitions from ${options.to}`,
+          `Will COPY all ${
+            sourceMetafieldDefs.length + sourceMetaobjectDefs.length
+          } definitions from ${options.from}`,
+          'This completely replaces the target store definitions',
+        ],
+        skipConfirmation: options.yes,
+      });
+
+      if (!confirmed) {
+        ctx.logger.info('Bulk sync operation cancelled by user.');
+        return;
+      }
+
       // Phase 1: Delete all from target
       if (targetMetafieldDefs.length > 0 || targetMetaobjectDefs.length > 0) {
-        ctx.logger.warning(
-          `This will DELETE ALL ${
-            targetMetafieldDefs.length + targetMetaobjectDefs.length
-          } definitions from ${options.to}!`
-        );
-
         ctx.logger.info('Deleting all definitions from target store...');
         const deleteResults = await targetManager.deleteDefinitions({
           metafields: targetMetafieldDefs,
