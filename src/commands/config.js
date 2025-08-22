@@ -1,6 +1,6 @@
 /**
- * Configuration diagnostics command for Phase 3 testing
- * Displays enhanced configuration information and validates setup
+ * Configuration diagnostics command
+ * Displays configuration information, validates setup, and aids troubleshooting
  */
 
 import { Command } from 'commander';

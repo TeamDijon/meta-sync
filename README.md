@@ -1,30 +1,24 @@
-# Meta-Syn- 🔍 **List** all definitions from any store with unified manifest export
+# Meta-Sync �
 
-- 📋 **Copy** selective definitions using manifest files
-- 🚀 **Bulk sync** complete store definitions (destructive + safe)
-- 🗑️ **Delete** selective or all definitions with confirmation prompts
-- 🎯 **Resource filtering** - target metafields, metaobjects, or both
-- 📦 **Entry management** - copy metaobject entries with conflict resolution
-- 🎭 **Dry-run** preview changes before execution
-- 📝 **Comprehensive logging** with verbose output and file logging
-- 🛡️ **Safety controls** with interactive confirmations for destructive operations
-- 🔄 **Unified manifest format** - seamless list → copy/delete workflowpowerful CLI tool for syncing Shopify metafield and metaobject definitions between stores. Perfect for staging → production deployments with safety controls and manifest-based workflows.
+A powerful CLI tool for syncing Shopify metafield and metaobject definitions between stores. Perfect for staging → production deployments with safety controls and manifest-based workflows.
 
 [![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
-[![Shopify API](https://img.shields.io/badge/Shopify_API-2025--01-blue.svg)](https://shopify.dev/docs/api)
+[![Shopify API](https://img.shields.io/badge/Shopify_API-unstable-blue.svg)](https://shopify.dev/docs/api)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## ✨ Features
 
 - 🔍 **List** all definitions from any store with unified manifest export
 - 📋 **Copy** selective definitions using manifest files
-- 🚀 **Bulk sync** complete store definitions (destructive + safe)
+- 🚀 **Bulk sync** complete store definitions (delete-first + copy architecture)
 - 🗑️ **Delete** selective or all definitions with confirmation prompts
-- � **Resource filtering** - target metafields, metaobjects, or both
-- �🎭 **Dry-run** preview changes before execution
+- 🎯 **Resource filtering** - target metafields, metaobjects, or both
+- 📦 **Entry management** - copy metaobject entries with conflict resolution
+- 🎭 **Dry-run** preview changes before execution
 - 📝 **Comprehensive logging** with verbose output and file logging
 - 🛡️ **Safety controls** with interactive confirmations for destructive operations
 - 🔄 **Unified manifest format** - seamless list → copy/delete workflow
+- ⚙️ **Configuration diagnostics** - validate stores, test connections, troubleshoot issues
 
 ## 🚀 Quick Start
 
@@ -45,38 +39,17 @@ npm run list -- --store staging
 npm run copy -- --from staging --to production --dry-run
 ```
 
-## ⚙️ Configuration
-
-Create a `.env` file with your Shopify private app credentials:
-
-```env
-# Store configurations - use any naming convention
-STAGING_STORE_URL=my-staging-store.myshopify.com
-STAGING_ACCESS_TOKEN=shppa_xxxxxxxxxx
-
-PRODUCTION_STORE_URL=my-production-store.myshopify.com
-PRODUCTION_ACCESS_TOKEN=shppa_xxxxxxxxxx
-
-# Add as many stores as needed
-DEV_STORE_URL=dev-store.myshopify.com
-DEV_ACCESS_TOKEN=shppa_xxxxxxxxxx
-```
-
-> **💡 Store Mapping**: The `--store` parameter uses environment variable prefixes:
->
-> - `--store staging` → `STAGING_STORE_URL` + `STAGING_ACCESS_TOKEN`
-> - `--store production` → `PRODUCTION_STORE_URL` + `PRODUCTION_ACCESS_TOKEN`
-
 ## 📖 Commands Overview
 
 ### Core Commands
 
-| Command  | Description                         | Safety Level     |
-| -------- | ----------------------------------- | ---------------- |
-| `list`   | Export all definitions to manifest  | ✅ Safe          |
-| `copy`   | Copy selective definitions          | ⚠️ Modify target |
-| `bulk`   | Complete store sync (delete + copy) | 🚨 Destructive   |
-| `delete` | Remove selective/all definitions    | 🚨 Destructive   |
+| Command  | Description                          | Safety Level     |
+| -------- | ------------------------------------ | ---------------- |
+| `list`   | Export all definitions to manifest   | ✅ Safe          |
+| `copy`   | Copy selective definitions           | ⚠️ Modify target |
+| `bulk`   | Complete store sync (delete + copy)  | 🚨 Destructive   |
+| `delete` | Remove selective/all definitions     | 🚨 Destructive   |
+| `config` | Validate configuration & diagnostics | ✅ Safe          |
 
 ### Global Options
 
@@ -127,11 +100,14 @@ npm run list -- --store <store> --resources metafields --output metafields.md
 # Copy only metaobjects with entries and manifest
 npm run copy -- --from <source> --to <target> --manifest manifest.md --resources metaobjects --include-entries --dry-run
 
-# Bulk sync only metafields (destructive)
+# Bulk sync only metafields (delete-first architecture)
 npm run bulk -- --from <source> --to <target> --resources metafields --verbose
 
 # Delete metaobjects including entries with confirmation
 npm run delete -- --store <target> --manifest cleanup.md --resources metaobjects --include-entries
+
+# Validate configuration and test connections
+npm run config
 ```
 
 ### Alternative: Direct CLI
@@ -139,6 +115,56 @@ npm run delete -- --store <target> --manifest cleanup.md --resources metaobjects
 ```bash
 node src/cli.js <command> [options]
 ```
+
+## ⚙️ Configuration Management
+
+### Environment Setup
+
+Create a `.env` file with your Shopify private app credentials:
+
+```env
+# Store configurations - use any naming convention
+STAGING_STORE_URL=my-staging-store.myshopify.com
+STAGING_ACCESS_TOKEN=shppa_xxxxxxxxxx
+
+PRODUCTION_STORE_URL=my-production-store.myshopify.com
+PRODUCTION_ACCESS_TOKEN=shppa_xxxxxxxxxx
+
+# Add as many stores as needed
+DEV_STORE_URL=dev-store.myshopify.com
+DEV_ACCESS_TOKEN=shppa_xxxxxxxxxx
+```
+
+> **💡 Store Mapping**: The `--store` parameter uses environment variable prefixes:
+>
+> - `--store staging` → `STAGING_STORE_URL` + `STAGING_ACCESS_TOKEN`
+> - `--store production` → `PRODUCTION_STORE_URL` + `PRODUCTION_ACCESS_TOKEN`
+
+### Configuration Diagnostics
+
+Use the `config` command to validate your setup and troubleshoot issues:
+
+```bash
+# Check configuration and test connections
+npm run config
+
+# Example output:
+# ✅ Configuration Status
+# 📊 Stores configured: 2
+# 🏪 Available stores: production, staging
+# 🌍 Environment: development
+#
+# ✅ Store Connection Tests
+# ✅ production: Client creation successful
+# ✅ staging: Client creation successful
+```
+
+The config command provides:
+
+- **Store validation**: Confirms all configured stores
+- **Environment verification**: Shows current environment settings
+- **Connection testing**: Validates API client creation
+- **Troubleshooting guidance**: Helps identify configuration issues
 
 ## 📋 Unified Manifest Format
 
@@ -186,6 +212,30 @@ Found 25 metafield definitions and 3 metaobject definitions.
 - **Metaobjects**: Define as `### type`
 - **Parsing**: Only `###` headers are parsed - other content is informational
 
+## 🏗️ Bulk Command Architecture
+
+The `bulk` command implements a **delete-first architecture** for complete store synchronization:
+
+### Workflow
+
+1. **Delete Phase**: Removes all definitions from target store
+2. **Copy Phase**: Copies all definitions from source store
+3. **Entry Sync**: Optionally syncs metaobject entries (with `--include-entries`)
+
+### Benefits
+
+- **Clean Slate**: Ensures target store exactly matches source
+- **No Conflicts**: Eliminates definition conflicts and orphaned data
+- **Consistency**: Guarantees identical store configurations
+- **DRY Architecture**: Reuses existing `delete` and `copy` command logic
+
+### Safety Features
+
+- **Dry-run Preview**: Shows both delete and copy operations
+- **Interactive Confirmation**: Requires explicit approval
+- **Verbose Logging**: Detailed progress tracking
+- **Error Handling**: Robust error recovery and reporting
+
 ## 🔄 Common Workflows
 
 ### 1. Selective Deployment
@@ -202,13 +252,13 @@ npm run copy -- --from staging --to production --manifest review.md --dry-run
 npm run copy -- --from staging --to production --manifest review.md
 ```
 
-### 2. Complete Store Migration
+### 2. Complete Store Migration (Delete-First Architecture)
 
 ```bash
-# Preview full sync
+# Preview full sync (shows delete + copy operations)
 npm run bulk -- --from staging --to production --dry-run --verbose
 
-# Execute with confirmation
+# Execute with confirmation (deletes all target definitions first, then copies)
 npm run bulk -- --from staging --to production
 
 # Or skip confirmation for automation
@@ -238,6 +288,16 @@ npm run copy -- --from dev --to staging
 
 npm run copy -- --from staging --to production --dry-run
 npm run copy -- --from staging --to production
+```
+
+### 5. Configuration Validation & Troubleshooting
+
+```bash
+# Validate all store configurations
+npm run config
+
+# Test before important operations
+npm run config && npm run bulk -- --from staging --to production --dry-run
 ```
 
 ## 🛡️ Safety Features
@@ -319,24 +379,48 @@ For complete functionality, configure private apps with these scopes:
 
 ## 🐛 Troubleshooting
 
+### Configuration Validation
+
+First step for any issues - validate your configuration:
+
+```bash
+# Check configuration and test connections
+npm run config
+
+# This will verify:
+# - Store URLs and access tokens
+# - API client creation
+# - Environment variables
+# - Connection status
+```
+
 ### Common Issues
 
 **Authentication Errors:**
 
+- Run `npm run config` to test your store connections
 - Verify store URLs and access tokens in `.env`
 - Check private app scopes match your metafield types
-- Ensure tokens have correct permissions
+- Ensure tokens have correct permissions (especially `read_metaobjects_definitions`)
+
+**Metaobject Entry Issues:**
+
+- Ensure you have `read_metaobjects` scope for accessing entries
+- Use `--verbose` to see detailed GraphQL query information
+- Check that metaobject definitions exist before trying to copy entries
 
 **Sync Failures:**
 
 - Use `--dry-run` to preview and identify issues
 - Check `--verbose` logs for detailed error information
 - Verify source definitions exist before copying
+- For bulk operations, ensure sufficient API rate limits
 
 **Performance:**
 
 - Large operations may take time - use `--verbose` for progress
 - Consider selective manifest copying instead of bulk operations
+- Monitor API rate limits during bulk operations
 
 ### Error Analysis
 
@@ -361,12 +445,14 @@ meta-sync/
 │   ├── commands/               # Command implementations
 │   │   ├── list.js            # List definitions
 │   │   ├── copy.js            # Copy definitions
-│   │   ├── bulk.js            # Bulk sync
-│   │   └── delete.js          # Delete definitions
+│   │   ├── bulk.js            # Bulk sync (delete + copy)
+│   │   ├── delete.js          # Delete definitions
+│   │   └── config.js          # Configuration diagnostics
 │   ├── managers/
 │   │   └── definition.js      # Core business logic
 │   ├── shopify/
-│   │   └── client.js          # GraphQL API client
+│   │   ├── client.js          # GraphQL API client
+│   │   └── graphql-fragments.js # GraphQL query builders
 │   └── utils/
 │       ├── config.js          # Configuration management
 │       ├── logger.js          # Logging utilities
@@ -382,8 +468,8 @@ meta-sync/
 
 - **Runtime**: Node.js 18+ with ES modules
 - **CLI Framework**: Commander.js for argument parsing
-- **API Client**: Custom GraphQL client for Shopify Admin API 2025-01
-- **Architecture**: Command pattern with base classes and managers
+- **API Client**: Custom GraphQL client for Shopify Admin API (unstable version)
+- **Architecture**: Command pattern with base classes, managers, and DRY principles
 
 ### Running Tests
 
