@@ -1,3 +1,6 @@
+import { FRAGMENTS, QUERIES } from './graphql-fragments.js';
+import { ErrorProcessor } from '../utils/error-processor.js';
+
 export class ShopifyClient {
   constructor(token, storeName = null) {
     if (!token) {
@@ -49,205 +52,94 @@ export class ShopifyClient {
 
   // Metafield Definition Operations
   async getMetafieldDefinitions(ownerType = null) {
-    let query, variables;
+    const filters = ownerType ? 'ownerType: $ownerType,' : '';
+    const query = QUERIES.buildPaginatedQuery(
+      'metafieldDefinitions',
+      FRAGMENTS.METAFIELD_DEFINITION,
+      filters
+    );
 
+    const variables = { first: 100 };
     if (ownerType) {
-      // Query with specific owner type
-      query = `
-        query GetMetafieldDefinitions($ownerType: MetafieldOwnerType!, $first: Int) {
-          metafieldDefinitions(ownerType: $ownerType, first: $first) {
-            edges {
-              node {
-                id
-                name
-                namespace
-                key
-                description
-                type {
-                  name
-                }
-                ownerType
-                access {
-                  admin
-                  storefront
-                }
-                validations {
-                  name
-                  type
-                  value
-                }
-              }
-            }
-            pageInfo {
-              hasNextPage
-              endCursor
-            }
-          }
-        }
-      `;
-      variables = { ownerType, first: 100 };
-    } else {
-      // Query for all metafield definitions
-      query = `
-        query GetMetafieldDefinitions($first: Int) {
-          metafieldDefinitions(first: $first) {
-            edges {
-              node {
-                id
-                name
-                namespace
-                key
-                description
-                type {
-                  name
-                }
-                ownerType
-                access {
-                  admin
-                  storefront
-                }
-                validations {
-                  name
-                  type
-                  value
-                }
-              }
-            }
-            pageInfo {
-              hasNextPage
-              endCursor
-            }
-          }
-        }
-      `;
-      variables = { first: 100 };
+      variables.ownerType = ownerType;
     }
 
     return await this.query(query, variables);
   }
 
   async createMetafieldDefinition(definition) {
-    const mutation = `
-      mutation CreateMetafieldDefinition($definition: MetafieldDefinitionInput!) {
-        metafieldDefinitionCreate(definition: $definition) {
-          createdDefinition {
-            id
-            name
-            namespace
-            key
-            type {
-              name
-            }
-            ownerType
-          }
-          userErrors {
-            field
-            message
-            code
-          }
-        }
-      }
-    `;
+    const mutation = QUERIES.buildCreateMutation(
+      'metafieldDefinitionCreate',
+      'MetafieldDefinitionInput!',
+      `createdDefinition { ${FRAGMENTS.METAFIELD_DEFINITION} }`
+    );
 
-    return await this.query(mutation, { definition });
+    const response = await this.query(mutation, { input: definition });
+    const result = ErrorProcessor.processShopifyErrors(
+      response.metafieldDefinitionCreate,
+      'createMetafieldDefinition',
+      `${definition.namespace}.${definition.key}`
+    );
+
+    return {
+      success: result.length === 0,
+      data: response.metafieldDefinitionCreate?.createdDefinition,
+      errors: result,
+    };
   }
 
   async deleteMetafieldDefinition(id) {
     const mutation = `
-      mutation DeleteMetafieldDefinition($id: ID!, $deleteAllAssociatedMetafields: Boolean!) {
-        metafieldDefinitionDelete(id: $id, deleteAllAssociatedMetafields: $deleteAllAssociatedMetafields) {
+      mutation DeleteMetafieldDefinition($id: ID!) {
+        metafieldDefinitionDelete(id: $id, deleteAllAssociatedMetafields: true) {
           deletedDefinitionId
-          userErrors {
-            field
-            message
-            code
-          }
+          ${FRAGMENTS.ERROR_FRAGMENT}
         }
       }
     `;
 
-    return await this.query(mutation, {
-      id,
-      deleteAllAssociatedMetafields: true,
-    });
+    const response = await this.query(mutation, { id });
+    const result = ErrorProcessor.processShopifyErrors(
+      response.metafieldDefinitionDelete,
+      'deleteMetafieldDefinition',
+      id
+    );
+
+    return {
+      success: result.length === 0,
+      data: response.metafieldDefinitionDelete?.deletedDefinitionId,
+      errors: result,
+    };
   }
 
   // Metaobject Definition Operations
   async getMetaobjectDefinitions() {
-    const query = `
-      query GetMetaobjectDefinitions($first: Int) {
-        metaobjectDefinitions(first: $first) {
-          edges {
-            node {
-              id
-              name
-              type
-              description
-              access {
-                admin
-                storefront
-              }
-              fieldDefinitions {
-                key
-                name
-                type {
-                  name
-                }
-                description
-                required
-                validations {
-                  name
-                  type
-                  value
-                }
-              }
-              capabilities {
-                publishable {
-                  enabled
-                }
-                translatable {
-                  enabled
-                }
-              }
-            }
-          }
-          pageInfo {
-            hasNextPage
-            endCursor
-          }
-        }
-      }
-    `;
-
+    const query = QUERIES.buildPaginatedQuery(
+      'metaobjectDefinitions',
+      FRAGMENTS.METAOBJECT_DEFINITION
+    );
     return await this.query(query, { first: 100 });
   }
 
   async createMetaobjectDefinition(definition) {
-    const mutation = `
-      mutation CreateMetaobjectDefinition($definition: MetaobjectDefinitionCreateInput!) {
-        metaobjectDefinitionCreate(definition: $definition) {
-          metaobjectDefinition {
-            id
-            name
-            type
-            fieldDefinitions {
-              key
-              name
-              type {
-                name
-              }
-            }
-          }
-          userErrors {
-            field
-            message
-            code
-          }
-        }
-      }
-    `;
+    const mutation = QUERIES.buildCreateMutation(
+      'metaobjectDefinitionCreate',
+      'MetaobjectDefinitionCreateInput!',
+      `metaobjectDefinition { ${FRAGMENTS.METAOBJECT_DEFINITION} }`
+    );
 
-    return await this.query(mutation, { definition });
+    const response = await this.query(mutation, { input: definition });
+    const result = ErrorProcessor.processShopifyErrors(
+      response.metaobjectDefinitionCreate,
+      'createMetaobjectDefinition',
+      definition.type
+    );
+
+    return {
+      success: result.length === 0,
+      data: response.metaobjectDefinitionCreate?.metaobjectDefinition,
+      errors: result,
+    };
   }
 
   async deleteMetaobjectDefinition(id) {
@@ -255,15 +147,195 @@ export class ShopifyClient {
       mutation DeleteMetaobjectDefinition($id: ID!) {
         metaobjectDefinitionDelete(id: $id) {
           deletedId
-          userErrors {
-            field
-            message
-            code
-          }
+          ${FRAGMENTS.ERROR_FRAGMENT}
         }
       }
     `;
 
-    return await this.query(mutation, { id });
+    const response = await this.query(mutation, { id });
+    const result = ErrorProcessor.processShopifyErrors(
+      response.metaobjectDefinitionDelete,
+      'deleteMetaobjectDefinition',
+      id
+    );
+
+    return {
+      success: result.length === 0,
+      data: response.metaobjectDefinitionDelete?.deletedId,
+      errors: result,
+    };
+  }
+
+  // Metaobject Entry Operations
+  async getMetaobjectEntries(type, first = 250, after = null) {
+    const query = QUERIES.buildPaginatedQuery(
+      'metaobjects',
+      FRAGMENTS.METAOBJECT_ENTRY,
+      'type: $type'
+    );
+    return await this.query(query, { type, first, after });
+  }
+
+  async getMetaobjectDefinitionWithEntriesCount(type) {
+    const query = `
+      query GetMetaobjectDefinitionWithEntriesCount($type: String!) {
+        metaobjectDefinitionByType(type: $type) {
+          id
+          name
+          type
+          metaobjectsCount
+        }
+      }
+    `;
+
+    return await this.query(query, { type });
+  }
+
+  async getMetaobjectByHandle(type, handle) {
+    const query = `
+      query GetMetaobjectByHandle($handle: MetaobjectHandleInput!) {
+        metaobjectByHandle(handle: $handle) {
+          ${FRAGMENTS.METAOBJECT_ENTRY}
+        }
+      }
+    `;
+
+    return await this.query(query, { handle: { type, handle } });
+  }
+
+  async createMetaobjectEntry(type, handle, fields, capabilities = null) {
+    const mutation = QUERIES.buildCreateMutation(
+      'metaobjectCreate',
+      'MetaobjectCreateInput!',
+      `metaobject { ${FRAGMENTS.METAOBJECT_ENTRY} }`
+    );
+
+    const metaobject = {
+      type,
+      handle,
+      fields: fields.map((field) => ({
+        key: field.key,
+        value: field.value,
+      })),
+    };
+
+    if (capabilities) {
+      metaobject.capabilities = capabilities;
+    }
+
+    const response = await this.query(mutation, { input: metaobject });
+    const result = ErrorProcessor.processShopifyErrors(
+      response.metaobjectCreate,
+      'createMetaobjectEntry',
+      `${type}:${handle}`
+    );
+
+    return {
+      success: result.length === 0,
+      data: response.metaobjectCreate?.metaobject,
+      errors: result,
+    };
+  }
+
+  async updateMetaobjectEntry(id, fields, capabilities = null) {
+    const mutation = `
+      mutation UpdateMetaobjectEntry($id: ID!, $metaobject: MetaobjectUpdateInput!) {
+        metaobjectUpdate(id: $id, metaobject: $metaobject) {
+          metaobject {
+            ${FRAGMENTS.METAOBJECT_ENTRY}
+          }
+          ${FRAGMENTS.ERROR_FRAGMENT}
+        }
+      }
+    `;
+
+    const metaobject = {
+      fields: fields.map((field) => ({
+        key: field.key,
+        value: field.value,
+      })),
+    };
+
+    if (capabilities) {
+      metaobject.capabilities = capabilities;
+    }
+
+    const response = await this.query(mutation, { id, metaobject });
+    const result = ErrorProcessor.processShopifyErrors(
+      response.metaobjectUpdate,
+      'updateMetaobjectEntry',
+      id
+    );
+
+    return {
+      success: result.length === 0,
+      data: response.metaobjectUpdate?.metaobject,
+      errors: result,
+    };
+  }
+
+  async upsertMetaobjectEntry(type, handle, fields, capabilities = null) {
+    const mutation = `
+      mutation UpsertMetaobjectEntry($handle: MetaobjectHandleInput!, $metaobject: MetaobjectUpsertInput!) {
+        metaobjectUpsert(handle: $handle, metaobject: $metaobject) {
+          metaobject {
+            ${FRAGMENTS.METAOBJECT_ENTRY}
+          }
+          ${FRAGMENTS.ERROR_FRAGMENT}
+        }
+      }
+    `;
+
+    const metaobject = {
+      fields: fields.map((field) => ({
+        key: field.key,
+        value: field.value,
+      })),
+    };
+
+    if (capabilities) {
+      metaobject.capabilities = capabilities;
+    }
+
+    const response = await this.query(mutation, {
+      handle: { type, handle },
+      metaobject,
+    });
+
+    const result = ErrorProcessor.processShopifyErrors(
+      response.metaobjectUpsert,
+      'upsertMetaobjectEntry',
+      `${type}:${handle}`
+    );
+
+    return {
+      success: result.length === 0,
+      data: response.metaobjectUpsert?.metaobject,
+      errors: result,
+    };
+  }
+
+  async deleteMetaobjectEntry(id) {
+    const mutation = `
+      mutation DeleteMetaobjectEntry($id: ID!) {
+        metaobjectDelete(id: $id) {
+          deletedId
+          ${FRAGMENTS.ERROR_FRAGMENT}
+        }
+      }
+    `;
+
+    const response = await this.query(mutation, { id });
+    const result = ErrorProcessor.processShopifyErrors(
+      response.metaobjectDelete,
+      'deleteMetaobjectEntry',
+      id
+    );
+
+    return {
+      success: result.length === 0,
+      data: response.metaobjectDelete?.deletedId,
+      errors: result,
+    };
   }
 }

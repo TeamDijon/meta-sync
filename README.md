@@ -1,6 +1,14 @@
-# Meta-Sync
+# Meta-Syn- 🔍 **List** all definitions from any store with unified manifest export
 
-> A powerful CLI tool for syncing Shopify metafield and metaobject definitions between stores. Perfect for staging → production deployments with safety controls and manifest-based workflows.
+- 📋 **Copy** selective definitions using manifest files
+- 🚀 **Bulk sync** complete store definitions (destructive + safe)
+- 🗑️ **Delete** selective or all definitions with confirmation prompts
+- 🎯 **Resource filtering** - target metafields, metaobjects, or both
+- 📦 **Entry management** - copy metaobject entries with conflict resolution
+- 🎭 **Dry-run** preview changes before execution
+- 📝 **Comprehensive logging** with verbose output and file logging
+- 🛡️ **Safety controls** with interactive confirmations for destructive operations
+- 🔄 **Unified manifest format** - seamless list → copy/delete workflowpowerful CLI tool for syncing Shopify metafield and metaobject definitions between stores. Perfect for staging → production deployments with safety controls and manifest-based workflows.
 
 [![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
 [![Shopify API](https://img.shields.io/badge/Shopify_API-2025--01-blue.svg)](https://shopify.dev/docs/api)
@@ -12,7 +20,8 @@
 - 📋 **Copy** selective definitions using manifest files
 - 🚀 **Bulk sync** complete store definitions (destructive + safe)
 - 🗑️ **Delete** selective or all definitions with confirmation prompts
-- 🎭 **Dry-run** preview changes before execution
+- � **Resource filtering** - target metafields, metaobjects, or both
+- �🎭 **Dry-run** preview changes before execution
 - 📝 **Comprehensive logging** with verbose output and file logging
 - 🛡️ **Safety controls** with interactive confirmations for destructive operations
 - 🔄 **Unified manifest format** - seamless list → copy/delete workflow
@@ -71,12 +80,36 @@ DEV_ACCESS_TOKEN=shppa_xxxxxxxxxx
 
 ### Global Options
 
-| Option         | Description                            |
-| -------------- | -------------------------------------- |
-| `--dry-run`    | Preview changes without execution      |
-| `--verbose`    | Detailed logging output                |
-| `--log <path>` | Save logs to file                      |
-| `--yes`        | Skip confirmation prompts (automation) |
+| Option              | Description                                                 |
+| ------------------- | ----------------------------------------------------------- |
+| `--dry-run`         | Preview changes without execution                           |
+| `--verbose`         | Detailed logging output                                     |
+| `--log <path>`      | Save logs to file                                           |
+| `--yes`             | Skip confirmation prompts (automation)                      |
+| `--resources`       | Filter resource types (`metafields`, `metaobjects`, `both`) |
+| `--include-entries` | Include metaobject entries in processing                    |
+
+### Resource Type Filtering
+
+All commands support the `--resources` option to filter which resource types to process:
+
+- `--resources metafields` - Process only metafield definitions
+- `--resources metaobjects` - Process only metaobject definitions
+- `--resources both` - Process both types (default)
+
+### Metaobject Entry Management
+
+The `--include-entries` flag enables processing of metaobject entries (actual data instances):
+
+- **List command**: Shows entry counts for each metaobject type
+- **Copy/Bulk commands**: Copies entries after definitions with conflict resolution
+- **Delete command**: Removes entries before deleting definitions
+
+Entry conflicts are resolved interactively with options to:
+
+- Skip conflicting entries
+- Update existing entries with new values
+- Apply same decision to all future conflicts
 
 ## 🛠️ Usage
 
@@ -85,17 +118,20 @@ DEV_ACCESS_TOKEN=shppa_xxxxxxxxxx
 Use NPM scripts for cleaner commands:
 
 ```bash
-# List definitions
-npm run list -- --store <store> --output manifest.md
+# List definitions with entry counts
+npm run list -- --store <store> --include-entries --output manifest.md
 
-# Copy with manifest
-npm run copy -- --from <source> --to <target> --manifest manifest.md --dry-run
+# List only metafields
+npm run list -- --store <store> --resources metafields --output metafields.md
 
-# Bulk sync (destructive)
-npm run bulk -- --from <source> --to <target> --verbose
+# Copy only metaobjects with entries and manifest
+npm run copy -- --from <source> --to <target> --manifest manifest.md --resources metaobjects --include-entries --dry-run
 
-# Delete with confirmation
-npm run delete -- --store <target> --manifest cleanup.md
+# Bulk sync only metafields (destructive)
+npm run bulk -- --from <source> --to <target> --resources metafields --verbose
+
+# Delete metaobjects including entries with confirmation
+npm run delete -- --store <target> --manifest cleanup.md --resources metaobjects --include-entries
 ```
 
 ### Alternative: Direct CLI

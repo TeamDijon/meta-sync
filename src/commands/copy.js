@@ -1,204 +1,249 @@
 import { Command } from 'commander';
 import { CommandHandler } from '../utils/command-base.js';
+import {
+  COMMON_OPTIONS,
+  createCommandAction,
+} from '../utils/command-options.js';
 import { ManifestParser } from '../utils/manifest.js';
+import { EntryConflictResolver } from '../utils/entry-conflict.js';
+import { validateStoreNames, createShopifyClient } from '../utils/config.js';
+import { DefinitionManager } from '../managers/definition.js';
 
-const copyCommand = new Command('copy')
-  .description('Copy metafield and metaobject definitions between stores')
-  .requiredOption('--from <store>', 'Source store name')
-  .requiredOption('--to <store>', 'Target store name')
-  .option(
-    '--manifest <file>',
-    'Manifest file specifying which definitions to copy'
-  )
-  .action(async (options, command) => {
-    const handler = new CommandHandler(
-      'Copy Definitions',
-      options,
-      command.parent.opts()
+class CopyCommand extends CommandHandler {
+  async execute(options) {
+    const { from, to, manifest, resources, includeEntries } = options;
+
+    const startTime = this.logger.startOperation('Copy Definitions', {
+      from,
+      to,
+      manifest,
+      resources,
+      includeEntries,
+      dryRun: this.globalOpts.dryRun,
+    });
+
+    // Create clients for both stores
+    validateStoreNames([from, to]);
+    const sourceClient = createShopifyClient(from);
+    const targetClient = createShopifyClient(to);
+    const sourceManager = new DefinitionManager(sourceClient, this.logger);
+    const targetManager = new DefinitionManager(targetClient, this.logger);
+
+    let definitionsToCopy;
+
+    if (manifest) {
+      // Manifest-based copying
+      this.logger.info(`Parsing manifest file: ${manifest}`);
+      const manifestDefs = ManifestParser.parseFile(manifest);
+
+      const sourceDefinitions = await this.fetchAndFilterDefinitions(
+        sourceManager,
+        {
+          includeEntries,
+          resources,
+        }
+      );
+
+      const matches = ManifestParser.findMatchingDefinitions(
+        manifestDefs,
+        sourceDefinitions
+      );
+
+      if (matches.notFound.length > 0) {
+        this.logger.warning(
+          'Some definitions from manifest were not found in source store:'
+        );
+        matches.notFound.forEach((def) => {
+          this.logger.warning(`  - ${def.type}: ${def.identifier}`);
+        });
+      }
+
+      definitionsToCopy = {
+        metafields: matches.metafields,
+        metaobjects: matches.metaobjects,
+      };
+    } else {
+      // Copy all definitions
+      this.logger.info(
+        `Will copy ALL definitions (filtered by resource type):`
+      );
+      definitionsToCopy = await this.fetchAndFilterDefinitions(sourceManager, {
+        includeEntries,
+        resources,
+      });
+    }
+
+    // Prepare definitions for copying
+    definitionsToCopy = await this.prepareDefinitionsForOperation(
+      sourceManager,
+      definitionsToCopy,
+      { operation: 'copy' }
     );
 
-    await handler.execute(async (ctx) => {
-      // Create clients for both stores
-      const clients = ctx.createClients([options.from, options.to]);
-      const sourceManager = ctx.createManager(clients[options.from]);
-      const targetManager = ctx.createManager(clients[options.to]);
+    // Check for conflicts in target store
+    this.logger.info(
+      `Checking for existing definitions in target store (${to})...`
+    );
+    const targetDefinitions = await targetManager.getAllDefinitions();
 
-      // Get all definitions from source
-      ctx.logger.info(
-        `Fetching definitions from source store (${options.from})...`
+    const conflicts = {
+      metafields: [],
+      metaobjects: [],
+    };
+
+    // Check metafield conflicts
+    for (const def of definitionsToCopy.metafields) {
+      const existing = targetDefinitions.metafields.find(
+        (target) => target.namespace === def.namespace && target.key === def.key
       );
-      const sourceDefinitions = await sourceManager.getAllDefinitions();
-
-      let definitionsToCopy;
-
-      if (options.manifest) {
-        // Parse manifest and find matching definitions
-        ctx.logger.info(`Parsing manifest file: ${options.manifest}`);
-        const manifestDefs = ManifestParser.parseFile(options.manifest);
-
-        ctx.logger.verbose('Parsed manifest:', {
-          metafields: manifestDefs.metafields.length,
-          metaobjects: manifestDefs.metaobjects.length,
-        });
-
-        const matches = ManifestParser.findMatchingDefinitions(
-          manifestDefs,
-          sourceDefinitions
-        );
-
-        if (matches.notFound.length > 0) {
-          ctx.logger.warning(
-            'Some definitions from manifest were not found in source store:'
-          );
-          matches.notFound.forEach((def) => {
-            ctx.logger.warning(`  - ${def.type}: ${def.identifier}`);
-          });
-        }
-
-        definitionsToCopy = {
-          metafields: matches.metafields,
-          metaobjects: matches.metaobjects,
-        };
-
-        ctx.logger.info('Matched definitions from manifest:', {
-          metafields: matches.metafields.length,
-          metaobjects: matches.metaobjects.length,
-        });
-      } else {
-        // Copy all definitions
-        definitionsToCopy = sourceDefinitions;
-        ctx.logger.info('Will copy ALL definitions:', {
-          metafields: sourceDefinitions.metafields.length,
-          metaobjects: sourceDefinitions.metaobjects.length,
-        });
+      if (existing) {
+        conflicts.metafields.push({ source: def, target: existing });
       }
+    }
 
-      // Filter out reserved definitions before processing
-      definitionsToCopy = ctx.filterReservedDefinitions(
-        sourceManager,
-        definitionsToCopy,
-        'copy'
+    // Check metaobject conflicts
+    for (const def of definitionsToCopy.metaobjects) {
+      const existing = targetDefinitions.metaobjects.find(
+        (target) => target.type === def.type
       );
-      if (!definitionsToCopy) {
-        return;
+      if (existing) {
+        conflicts.metaobjects.push({ source: def, target: existing });
       }
+    }
 
-      // Check for conflicts in target store
-      ctx.logger.info(
-        `Checking for existing definitions in target store (${options.to})...`
+    // Report conflicts
+    const totalConflicts =
+      conflicts.metafields.length + conflicts.metaobjects.length;
+    if (totalConflicts > 0) {
+      this.logger.warning(
+        `Found ${totalConflicts} conflicting definitions in target store:`
       );
-      const targetDefinitions = await targetManager.getAllDefinitions();
-
-      const conflicts = {
-        metafields: [],
-        metaobjects: [],
-      };
-
-      // Check metafield conflicts
-      for (const def of definitionsToCopy.metafields) {
-        const existing = targetDefinitions.metafields.find(
-          (target) =>
-            target.namespace === def.namespace && target.key === def.key
+      conflicts.metafields.forEach((conflict) => {
+        this.logger.warning(
+          `  - Metafield: ${conflict.source.namespace}/${conflict.source.key}`
         );
-        if (existing) {
-          conflicts.metafields.push({
-            source: def,
-            target: existing,
-          });
-        }
+      });
+      conflicts.metaobjects.forEach((conflict) => {
+        this.logger.warning(`  - Metaobject: ${conflict.source.type}`);
+      });
+
+      if (!this.globalOpts.dryRun) {
+        this.logger.warning('Existing definitions will be OVERWRITTEN!');
       }
+    }
 
-      // Check metaobject conflicts
-      for (const def of definitionsToCopy.metaobjects) {
-        const existing = targetDefinitions.metaobjects.find(
-          (target) => target.type === def.type
-        );
-        if (existing) {
-          conflicts.metaobjects.push({
-            source: def,
-            target: existing,
-          });
-        }
-      }
-
-      // Report conflicts
-      const totalConflicts =
-        conflicts.metafields.length + conflicts.metaobjects.length;
-      if (totalConflicts > 0) {
-        ctx.logger.warning(
-          `Found ${totalConflicts} conflicting definitions in target store:`
-        );
-        conflicts.metafields.forEach((conflict) => {
-          ctx.logger.warning(
-            `  - Metafield: ${conflict.source.namespace}/${conflict.source.key}`
-          );
-        });
-        conflicts.metaobjects.forEach((conflict) => {
-          ctx.logger.warning(`  - Metaobject: ${conflict.source.type}`);
-        });
-
-        if (!ctx.globalOpts.dryRun) {
-          ctx.logger.warning('Existing definitions will be OVERWRITTEN!');
-          // TODO: Add interactive confirmation in future
-        }
-      }
-
-      if (ctx.globalOpts.dryRun) {
-        ctx.logger.dryRunInfo('DRY RUN - No actual changes will be made');
-        return;
-      }
-
-      // Delete conflicting definitions from target first
-      if (totalConflicts > 0) {
-        ctx.logger.info(
-          'Removing conflicting definitions from target store...'
-        );
-        const conflictingDefinitions = {
-          metafields: conflicts.metafields.map((c) => c.target),
-          metaobjects: conflicts.metaobjects.map((c) => c.target),
-        };
-
-        const deleteResults = await targetManager.deleteDefinitions(
-          conflictingDefinitions
-        );
-
-        ctx.logger.info('Deleted conflicting definitions:', {
-          metafields: deleteResults.metafields.success,
-          metaobjects: deleteResults.metaobjects.success,
-          errors:
-            deleteResults.metafields.errors.length +
-            deleteResults.metaobjects.errors.length,
-        });
-      }
-
-      // Copy definitions to target
-      ctx.logger.info('Copying definitions to target store...');
-      const copyResults = await targetManager.copyDefinitionsWithDependencies(
-        definitionsToCopy
-      );
-
-      const totalSuccess =
-        copyResults.metafields.success + copyResults.metaobjects.success;
-      const totalErrors =
-        copyResults.metafields.errors.length +
-        copyResults.metaobjects.errors.length;
-
-      if (totalErrors > 0) {
-        ctx.logger.warning(
-          `Operation completed with ${totalErrors} errors. Check logs for details.`
-        );
-      }
-
-      return {
-        copied: {
-          metafields: copyResults.metafields.success,
-          metaobjects: copyResults.metaobjects.success,
-          total: totalSuccess,
-        },
-        errors: totalErrors,
-        conflictsResolved: totalConflicts,
-      };
+    // Log summary
+    this.logDefinitionSummary(definitionsToCopy, {
+      includeEntries,
+      operation: 'copy',
+      verbose: this.logger.isVerbose,
     });
-  });
+
+    if (this.globalOpts.dryRun) {
+      this.logger.dryRunInfo('DRY RUN - No actual changes will be made');
+      return;
+    }
+
+    // Delete conflicting definitions from target first
+    if (totalConflicts > 0) {
+      this.logger.info('Removing conflicting definitions from target store...');
+      const conflictingDefinitions = {
+        metafields: conflicts.metafields.map((c) => c.target),
+        metaobjects: conflicts.metaobjects.map((c) => c.target),
+      };
+
+      const deleteResults = await targetManager.deleteDefinitions(
+        conflictingDefinitions
+      );
+      this.logger.info('Deleted conflicting definitions:', {
+        metafields: deleteResults.metafields.success,
+        metaobjects: deleteResults.metaobjects.success,
+        errors:
+          deleteResults.metafields.errors.length +
+          deleteResults.metaobjects.errors.length,
+      });
+    }
+
+    // Copy definitions to target
+    this.logger.info('Copying definitions to target store...');
+    const copyResults = await targetManager.copyDefinitionsWithDependencies(
+      definitionsToCopy
+    );
+
+    // Handle entries if requested
+    let entryCopyResults = { success: 0, errors: [], skipped: 0 };
+    if (includeEntries && definitionsToCopy.metaobjects.length > 0) {
+      this.logger.info('Copying metaobject entries...');
+
+      const entryConflictResolver = new EntryConflictResolver(
+        this.logger,
+        this.globalOpts.dryRun
+      );
+
+      entryCopyResults = await targetManager.copyMetaobjectEntries(
+        definitionsToCopy,
+        entryConflictResolver,
+        this.globalOpts.dryRun
+      );
+
+      if (entryCopyResults.errors.length > 0) {
+        this.logger.warning(
+          `Entry copy completed with ${entryCopyResults.errors.length} errors.`
+        );
+        entryCopyResults.errors.forEach((error) => {
+          this.logger.error(
+            `Entry error - ${error.identifier}: ${error.error}`
+          );
+        });
+      }
+
+      if (entryCopyResults.success > 0) {
+        this.logger.success(
+          `Successfully copied ${entryCopyResults.success} entries`
+        );
+      }
+
+      if (entryCopyResults.skipped > 0) {
+        this.logger.info(
+          `Skipped ${entryCopyResults.skipped} entries due to conflicts`
+        );
+      }
+    }
+
+    // Summary
+    const totalSuccess =
+      copyResults.metafields.success + copyResults.metaobjects.success;
+    const totalErrors =
+      copyResults.metafields.errors.length +
+      copyResults.metaobjects.errors.length +
+      entryCopyResults.errors.length;
+
+    this.logger.endOperation('Copy Definitions', startTime, {
+      copied: {
+        metafields: copyResults.metafields.success,
+        metaobjects: copyResults.metaobjects.success,
+        entries: entryCopyResults.success,
+        total: totalSuccess,
+      },
+      errors: totalErrors,
+    });
+
+    if (totalErrors > 0) {
+      this.logger.warning(
+        `Operation completed with ${totalErrors} errors. Check logs for details.`
+      );
+    }
+  }
+}
+
+// Create command with standardized options
+const copyCommand = COMMON_OPTIONS.withStandardOptions(
+  COMMON_OPTIONS.withManifest(
+    new Command('copy')
+      .description('Copy metafield and metaobject definitions between stores')
+      .requiredOption('--from <store>', 'Source store name')
+      .requiredOption('--to <store>', 'Target store name')
+  )
+).action(createCommandAction(CopyCommand));
 
 export { copyCommand };

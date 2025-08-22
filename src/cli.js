@@ -21,6 +21,7 @@ import { bulkCommand } from './commands/bulk.js';
 import { listCommand } from './commands/list.js';
 import { copyCommand } from './commands/copy.js';
 import { deleteCommand } from './commands/delete.js';
+import { createConfigCommand } from './commands/config.js';
 
 const program = new Command();
 
@@ -43,6 +44,7 @@ program.addCommand(bulkCommand);
 program.addCommand(listCommand);
 program.addCommand(copyCommand);
 program.addCommand(deleteCommand);
+program.addCommand(createConfigCommand());
 
 // Parse arguments
 program.parse();

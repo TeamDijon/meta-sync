@@ -1,37 +1,39 @@
 import { Command } from 'commander';
 import { CommandHandler } from '../utils/command-base.js';
+import {
+  COMMON_OPTIONS,
+  createCommandAction,
+} from '../utils/command-options.js';
 import { ManifestParser } from '../utils/manifest.js';
 import { ConfirmationPrompt } from '../utils/confirmation.js';
 
 class DeleteCommand extends CommandHandler {
   async execute(options) {
-    const { store, manifest } = options;
+    const { store, manifest, resources, includeEntries } = options;
 
     const startTime = this.logger.startOperation('Delete Definitions', {
       store,
       manifest,
+      resources,
+      includeEntries,
       dryRun: this.globalOpts.dryRun,
     });
 
     // Create client and manager
+    // Create client and manager
     const { client, manager } = this.createClients(store);
-
     this.logger.verbose('Connected to store');
-
-    // Get all definitions from store
-    this.logger.info(`Fetching definitions from store (${store})...`);
-    const allDefinitions = await manager.getAllDefinitions();
 
     let definitionsToDelete;
 
     if (manifest) {
-      // Parse manifest and find matching definitions
+      // Manifest-based deletion
       this.logger.info(`Parsing manifest file: ${manifest}`);
       const manifestDefs = ManifestParser.parseFile(manifest);
 
-      this.logger.verbose('Parsed manifest:', {
-        metafields: manifestDefs.metafields.length,
-        metaobjects: manifestDefs.metaobjects.length,
+      const allDefinitions = await this.fetchAndFilterDefinitions(manager, {
+        includeEntries,
+        resources,
       });
 
       const matches = ManifestParser.findMatchingDefinitions(
@@ -52,67 +54,61 @@ class DeleteCommand extends CommandHandler {
         metafields: matches.metafields,
         metaobjects: matches.metaobjects,
       };
-
-      this.logger.info('Matched definitions from manifest:', {
-        metafields: matches.metafields.length,
-        metaobjects: matches.metaobjects.length,
-      });
     } else {
-      // Delete ALL definitions (dangerous!)
-      definitionsToDelete = allDefinitions;
-      this.logger.warning('Will delete ALL definitions:', {
-        metafields: allDefinitions.metafields.length,
-        metaobjects: allDefinitions.metaobjects.length,
-      });
+      // Delete ALL definitions
       this.logger.warning(
-        'This is a DESTRUCTIVE operation that will remove all definitions!'
+        'Will delete ALL definitions (filtered by resource type)'
       );
+      this.logger.warning(
+        'This is a DESTRUCTIVE operation that will remove all matching definitions!'
+      );
+
+      definitionsToDelete = await this.fetchAndFilterDefinitions(manager, {
+        includeEntries,
+        resources,
+      });
     }
 
-    // Filter out reserved definitions before processing
-    definitionsToDelete = this.filterReservedDefinitions(
+    // Prepare definitions for deletion
+    definitionsToDelete = await this.prepareDefinitionsForOperation(
       manager,
       definitionsToDelete,
-      'delete'
+      { operation: 'delete' }
     );
-    if (!definitionsToDelete) {
-      return;
-    }
 
-    // Show what will be deleted
-    const totalToDelete =
-      definitionsToDelete.metafields.length +
-      definitionsToDelete.metaobjects.length;
-
-    this.logger.info(`Preparing to delete ${totalToDelete} definitions:`);
-
-    if (definitionsToDelete.metafields.length > 0) {
-      this.logger.info(
-        `  Metafields: ${definitionsToDelete.metafields.length}`
-      );
-      if (this.logger.isVerbose) {
-        definitionsToDelete.metafields.forEach((def) => {
-          this.logger.verbose(
-            `    - ${def.namespace}.${def.key} (${def.name})`
-          );
-        });
-      }
-    }
-
-    if (definitionsToDelete.metaobjects.length > 0) {
-      this.logger.info(
-        `  Metaobjects: ${definitionsToDelete.metaobjects.length}`
-      );
-      if (this.logger.isVerbose) {
-        definitionsToDelete.metaobjects.forEach((def) => {
-          this.logger.verbose(`    - ${def.type} (${def.name})`);
-        });
-      }
-    }
+    // Log summary using base class method
+    this.logDefinitionSummary(definitionsToDelete, {
+      includeEntries,
+      operation: 'delete',
+      verbose: this.logger.isVerbose,
+    });
 
     if (this.globalOpts.dryRun) {
       this.logger.dryRunInfo('DRY RUN - No actual deletions will be performed');
+
+      // Show entry deletion info in dry run
+      if (includeEntries) {
+        const entryCount = definitionsToDelete.metaobjects.reduce(
+          (sum, def) => sum + (def.entries ? def.entries.length : 0),
+          0
+        );
+        if (entryCount > 0) {
+          this.logger.dryRunInfo(
+            `Would also delete ${entryCount} metaobject entries`
+          );
+        }
+      }
+
       return;
+    }
+
+    // Calculate entry count for confirmation
+    let totalEntries = 0;
+    if (includeEntries) {
+      totalEntries = definitionsToDelete.metaobjects.reduce(
+        (sum, def) => sum + (def.entries ? def.entries.length : 0),
+        0
+      );
     }
 
     // Interactive confirmation before proceeding with destructive operation
@@ -121,6 +117,10 @@ class DeleteCommand extends CommandHandler {
       details.push('ALL definitions will be deleted (no manifest specified)');
     } else {
       details.push(`Definitions specified in manifest: ${manifest}`);
+    }
+
+    if (includeEntries && totalEntries > 0) {
+      details.push(`${totalEntries} metaobject entries will also be deleted`);
     }
 
     const confirmed = await ConfirmationPrompt.confirm({
@@ -141,6 +141,26 @@ class DeleteCommand extends CommandHandler {
 
     // Perform deletions
     this.logger.info('Deleting definitions...');
+
+    // Delete entries first if requested
+    let entryDeletionResults = null;
+    if (includeEntries && definitionsToDelete.metaobjects.length > 0) {
+      this.logger.info('Deleting metaobject entries first...');
+      entryDeletionResults = await manager.deleteMetaobjectEntries(
+        definitionsToDelete
+      );
+
+      const entriesDeleted = entryDeletionResults.success;
+      const entryErrors = entryDeletionResults.errors.length;
+
+      this.logger.info(
+        `Deleted ${entriesDeleted} entries${
+          entryErrors > 0 ? ` with ${entryErrors} errors` : ''
+        }`
+      );
+    }
+
+    // Then delete definitions
     const deleteResults = await manager.deleteDefinitions(definitionsToDelete);
 
     const totalSuccess =
@@ -166,17 +186,12 @@ class DeleteCommand extends CommandHandler {
   }
 }
 
-const deleteCommand = new Command('delete')
-  .description('Delete metafield and metaobject definitions from a store')
-  .requiredOption('--store <store>', 'Target store name')
-  .option(
-    '--manifest <file>',
-    'Manifest file specifying which definitions to delete'
+const deleteCommand = COMMON_OPTIONS.withStandardOptions(
+  COMMON_OPTIONS.withManifest(
+    new Command('delete')
+      .description('Delete metafield and metaobject definitions from a store')
+      .requiredOption('--store <store>', 'Target store name')
   )
-  .option('--yes', 'Skip confirmation prompt (use with caution!)')
-  .action(async (options, command) => {
-    const handler = new DeleteCommand(command.parent.opts());
-    await handler.run(options);
-  });
+).action(createCommandAction(DeleteCommand));
 
 export { deleteCommand };

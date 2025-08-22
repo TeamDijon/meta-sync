@@ -5,9 +5,12 @@ import {
   MAX_DEPENDENCY_PASSES,
   PASS_DELAY_MS,
   CREATION_DELAY_MS,
+  ENTRY_CONFLICT_ACTIONS,
+  ENTRY_OPERATION_MODES,
   isReservedMetafieldNamespace,
   isReservedMetaobjectType,
 } from '../utils/constants.js';
+import { EntryConflictResolver } from '../utils/entry-conflict.js';
 
 export class DefinitionManager {
   constructor(client, logger) {
@@ -201,15 +204,13 @@ export class DefinitionManager {
 
     const result = await this.client.createMetafieldDefinition(definitionInput);
 
-    if (result.metafieldDefinitionCreate.userErrors.length > 0) {
+    if (!result.success) {
       throw new Error(
-        `Failed to create metafield definition ${def.namespace}/${
-          def.key
-        }: ${JSON.stringify(result.metafieldDefinitionCreate.userErrors)}`
+        `Failed to create metafield definition ${def.namespace}/${def.key}: ${result.errorMessage}`
       );
     }
 
-    return result.metafieldDefinitionCreate.createdDefinition;
+    return result.data;
   }
 
   async createMetaobjectDefinition(def) {
@@ -251,15 +252,13 @@ export class DefinitionManager {
       definitionInput
     );
 
-    if (result.metaobjectDefinitionCreate.userErrors.length > 0) {
+    if (!result.success) {
       throw new Error(
-        `Failed to create metaobject definition ${def.type}: ${JSON.stringify(
-          result.metaobjectDefinitionCreate.userErrors
-        )}`
+        `Failed to create metaobject definition ${def.type}: ${result.errorMessage}`
       );
     }
 
-    return result.metaobjectDefinitionCreate.metaobjectDefinition;
+    return result.data;
   }
 
   async deleteMetafieldDefinition(def) {
@@ -269,11 +268,9 @@ export class DefinitionManager {
 
     const result = await this.client.deleteMetafieldDefinition(def.id);
 
-    if (result.metafieldDefinitionDelete.userErrors.length > 0) {
+    if (!result.success) {
       throw new Error(
-        `Failed to delete metafield definition ${def.namespace}/${
-          def.key
-        }: ${JSON.stringify(result.metafieldDefinitionDelete.userErrors)}`
+        `Failed to delete metafield definition ${def.namespace}/${def.key}: ${result.errorMessage}`
       );
     }
 
@@ -285,15 +282,13 @@ export class DefinitionManager {
 
     const result = await this.client.deleteMetaobjectDefinition(def.id);
 
-    if (result.metaobjectDefinitionDelete.userErrors.length > 0) {
+    if (!result.success) {
       throw new Error(
-        `Failed to delete metaobject definition ${def.type}: ${JSON.stringify(
-          result.metaobjectDefinitionDelete.userErrors
-        )}`
+        `Failed to delete metaobject definition ${def.type}: ${result.errorMessage}`
       );
     }
 
-    return result.metaobjectDefinitionDelete.deletedId;
+    return result.data;
   }
 
   async copyDefinitionsWithDependencies(definitions, dryRun = false) {
@@ -465,5 +460,276 @@ export class DefinitionManager {
       },
       { dryRun }
     );
+  }
+
+  // Metaobject Entry Operations
+  async getAllDefinitionsWithEntries(includeEntries = false) {
+    const definitions = await this.getAllDefinitions();
+
+    if (includeEntries) {
+      // Add entry counts and optionally entries to metaobject definitions
+      for (const metaobjectDef of definitions.metaobjects) {
+        try {
+          const entriesData =
+            await this.client.getMetaobjectDefinitionWithEntriesCount(
+              metaobjectDef.type
+            );
+          metaobjectDef.entriesCount =
+            entriesData.metaobjectDefinitionByType?.metaobjectsCount || 0;
+
+          // Optionally fetch actual entries (for now, just the count)
+          metaobjectDef.entries = [];
+        } catch (error) {
+          this.logger.verbose(
+            `Failed to get entry count for ${metaobjectDef.type}: ${error.message}`
+          );
+          metaobjectDef.entriesCount = 0;
+          metaobjectDef.entries = [];
+        }
+      }
+    }
+
+    return definitions;
+  }
+
+  async getMetaobjectEntries(type) {
+    const allEntries = [];
+    let hasNextPage = true;
+    let after = null;
+
+    while (hasNextPage) {
+      try {
+        const response = await this.client.getMetaobjectEntries(
+          type,
+          250,
+          after
+        );
+        const entriesData = response.metaobjects;
+
+        allEntries.push(...entriesData.edges.map((edge) => edge.node));
+
+        hasNextPage = entriesData.pageInfo.hasNextPage;
+        after = entriesData.pageInfo.endCursor;
+      } catch (error) {
+        this.logger.error(
+          `Failed to fetch entries for ${type}: ${error.message}`
+        );
+        break;
+      }
+    }
+
+    return allEntries;
+  }
+
+  async copyMetaobjectEntries(
+    sourceDefinitions,
+    conflictResolver,
+    dryRun = false
+  ) {
+    const results = {
+      success: 0,
+      errors: [],
+      skipped: 0,
+    };
+
+    for (const metaobjectDef of sourceDefinitions.metaobjects || []) {
+      try {
+        this.logger.verbose(
+          `Processing entries for metaobject type: ${metaobjectDef.type}`
+        );
+
+        // Get all entries from source
+        const sourceEntries = await this.getMetaobjectEntries(
+          metaobjectDef.type
+        );
+
+        if (sourceEntries.length === 0) {
+          this.logger.verbose(`No entries found for ${metaobjectDef.type}`);
+          continue;
+        }
+
+        this.logger.info(
+          `Copying ${sourceEntries.length} entries for ${metaobjectDef.type}`
+        );
+
+        // Process each entry
+        for (const sourceEntry of sourceEntries) {
+          try {
+            const entryResult = await this.copyMetaobjectEntry(
+              sourceEntry,
+              conflictResolver,
+              dryRun
+            );
+
+            if (entryResult.action === ENTRY_CONFLICT_ACTIONS.QUIT) {
+              this.logger.info('Operation cancelled by user');
+              return results;
+            }
+
+            if (entryResult.success) {
+              results.success++;
+            } else if (entryResult.skipped) {
+              results.skipped++;
+            } else {
+              results.errors.push({
+                type: 'metaobject_entry',
+                identifier: `${sourceEntry.type}/${sourceEntry.handle}`,
+                error: entryResult.error,
+              });
+            }
+          } catch (error) {
+            results.errors.push({
+              type: 'metaobject_entry',
+              identifier: `${sourceEntry.type}/${sourceEntry.handle}`,
+              error: error.message,
+            });
+          }
+        }
+      } catch (error) {
+        this.logger.error(
+          `Failed to process entries for ${metaobjectDef.type}: ${error.message}`
+        );
+        results.errors.push({
+          type: 'metaobject_entries',
+          identifier: metaobjectDef.type,
+          error: error.message,
+        });
+      }
+    }
+
+    return results;
+  }
+
+  async copyMetaobjectEntry(sourceEntry, conflictResolver, dryRun = false) {
+    const entryIdentifier = `${sourceEntry.type}/${sourceEntry.handle}`;
+
+    if (dryRun) {
+      this.logger.dryRunInfo(`Would copy entry: ${entryIdentifier}`);
+      return { success: true, action: ENTRY_CONFLICT_ACTIONS.UPDATE };
+    }
+
+    try {
+      // Check if entry exists in target
+      const existingEntry = await this.client.getMetaobjectByHandle(
+        sourceEntry.type,
+        sourceEntry.handle
+      );
+
+      if (existingEntry.metaobjectByHandle) {
+        // Conflict detected - ask user what to do
+        const action = await conflictResolver.resolveConflict(
+          sourceEntry,
+          existingEntry.metaobjectByHandle,
+          entryIdentifier
+        );
+
+        if (action === ENTRY_CONFLICT_ACTIONS.QUIT) {
+          return { action: ENTRY_CONFLICT_ACTIONS.QUIT };
+        }
+
+        if (action === ENTRY_CONFLICT_ACTIONS.SKIP) {
+          this.logger.verbose(`Skipped entry: ${entryIdentifier}`);
+          return { skipped: true };
+        }
+
+        // Update existing entry
+        const result = await this.client.upsertMetaobjectEntry(
+          sourceEntry.type,
+          sourceEntry.handle,
+          sourceEntry.fields
+        );
+
+        if (!result.success) {
+          throw new Error(`Upsert failed: ${result.errorMessage}`);
+        }
+
+        this.logger.verbose(`Updated entry: ${entryIdentifier}`);
+        return { success: true, action };
+      } else {
+        // Entry doesn't exist - create it
+        const result = await this.client.createMetaobjectEntry(
+          sourceEntry.type,
+          sourceEntry.handle,
+          sourceEntry.fields
+        );
+
+        if (!result.success) {
+          throw new Error(`Create failed: ${result.errorMessage}`);
+        }
+
+        this.logger.verbose(`Created entry: ${entryIdentifier}`);
+        return { success: true, action: ENTRY_CONFLICT_ACTIONS.UPDATE };
+      }
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  async deleteMetaobjectEntries(definitions, dryRun = false) {
+    const results = {
+      success: 0,
+      errors: [],
+    };
+
+    for (const metaobjectDef of definitions.metaobjects || []) {
+      try {
+        this.logger.verbose(
+          `Deleting entries for metaobject type: ${metaobjectDef.type}`
+        );
+
+        const entries = await this.getMetaobjectEntries(metaobjectDef.type);
+
+        if (entries.length === 0) {
+          this.logger.verbose(`No entries found for ${metaobjectDef.type}`);
+          continue;
+        }
+
+        this.logger.info(
+          `Deleting ${entries.length} entries for ${metaobjectDef.type}`
+        );
+
+        if (dryRun) {
+          this.logger.dryRunInfo(
+            `Would delete ${entries.length} entries for ${metaobjectDef.type}`
+          );
+          results.success += entries.length;
+          continue;
+        }
+
+        for (const entry of entries) {
+          try {
+            const result = await this.client.deleteMetaobjectEntry(entry.id);
+
+            if (result.metaobjectDelete.userErrors.length > 0) {
+              throw new Error(
+                `Delete failed: ${JSON.stringify(
+                  result.metaobjectDelete.userErrors
+                )}`
+              );
+            }
+
+            results.success++;
+            this.logger.verbose(`Deleted entry: ${entry.type}/${entry.handle}`);
+          } catch (error) {
+            results.errors.push({
+              type: 'metaobject_entry',
+              identifier: `${entry.type}/${entry.handle}`,
+              error: error.message,
+            });
+          }
+        }
+      } catch (error) {
+        this.logger.error(
+          `Failed to delete entries for ${metaobjectDef.type}: ${error.message}`
+        );
+        results.errors.push({
+          type: 'metaobject_entries',
+          identifier: metaobjectDef.type,
+          error: error.message,
+        });
+      }
+    }
+
+    return results;
   }
 }

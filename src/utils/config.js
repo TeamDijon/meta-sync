@@ -1,57 +1,89 @@
-import { ShopifyClient } from '../shopify/client.js';
+/**
+ * Configuration utilities for Meta Sync
+ * This file provides backward compatibility while leveraging the enhanced ConfigManager
+ */
 
+import {
+  ConfigManager,
+  validateStoreNames as validateStoresNew,
+  createShopifyClient as createClientNew,
+  getStoreConfig as getStoreConfigNew,
+  getConfigManager as getConfigManagerFromManager,
+  getDefaults as getDefaultsFromManager,
+  getEnvironment as getEnvironmentFromManager,
+  getConfigSummary as getConfigSummaryFromManager,
+} from './config-manager.js';
+
+/**
+ * Legacy getStoreConfig function - maintained for backward compatibility
+ */
 export function getStoreConfig(storeName) {
-  const tokenKey = `${storeName.toUpperCase()}_STORE_TOKEN`;
-  const urlKey = `${storeName.toUpperCase()}_STORE_URL`;
-
-  const token = process.env[tokenKey];
-  const storeUrl = process.env[urlKey];
-
-  if (!token) {
-    throw new Error(
-      `Missing ${tokenKey} in environment variables. Please check your .env file.`
-    );
-  }
-
-  return {
-    token,
-    storeUrl,
-  };
+  return getStoreConfigNew(storeName);
 }
 
+/**
+ * Legacy createShopifyClient function - maintained for backward compatibility
+ */
 export function createShopifyClient(storeName) {
-  const { token, storeUrl } = getStoreConfig(storeName);
-
-  // Extract store name from URL if provided, otherwise use storeName
-  let actualStoreName = storeName;
-  if (storeUrl) {
-    const match = storeUrl.match(/^(?:https?:\/\/)?([^.]+)\.myshopify\.com/);
-    if (match) {
-      actualStoreName = match[1];
-    } else if (storeUrl.includes('.')) {
-      // Assume it's just the store name part
-      actualStoreName = storeUrl.split('.')[0];
-    } else {
-      // Assume it's just the store name
-      actualStoreName = storeUrl;
-    }
-  }
-
-  return new ShopifyClient(token, actualStoreName);
+  return createClientNew(storeName);
 }
 
+/**
+ * Legacy validateStoreNames function - maintained for backward compatibility
+ */
 export function validateStoreNames(stores) {
-  const missing = [];
+  return validateStoresNew(stores);
+}
 
-  for (const store of stores) {
-    try {
-      getStoreConfig(store);
-    } catch (error) {
-      missing.push(store);
-    }
-  }
+/**
+ * Enhanced configuration functions (Phase 3)
+ */
 
-  if (missing.length > 0) {
-    throw new Error(`Missing configuration for stores: ${missing.join(', ')}`);
-  }
+/**
+ * Get the singleton ConfigManager instance
+ */
+export function getConfigManager() {
+  return getConfigManagerFromManager();
+}
+
+/**
+ * Get default configuration values
+ */
+export function getDefaults() {
+  return getDefaultsFromManager();
+}
+
+/**
+ * Get environment information
+ */
+export function getEnvironment() {
+  return getEnvironmentFromManager();
+}
+
+/**
+ * Get all available store names
+ */
+export function getAvailableStores() {
+  return getConfigManager().getAvailableStores();
+}
+
+/**
+ * Check if a store is configured
+ */
+export function hasStore(storeName) {
+  return getConfigManager().hasStore(storeName);
+}
+
+/**
+ * Get configuration summary for debugging
+ */
+export function getConfigSummary() {
+  return getConfigSummaryFromManager();
+}
+
+/**
+ * Reload configuration from environment
+ */
+export function reloadConfig() {
+  return getConfigManager().reload();
 }

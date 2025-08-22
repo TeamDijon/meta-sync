@@ -1,9 +1,16 @@
-import { createShopifyClient, validateStoreNames } from './config.js';
+import {
+  createShopifyClient,
+  validateStoreNames,
+  getConfigManager,
+  getDefaults,
+  getEnvironment,
+} from './config.js';
 import { createLogger } from './logger.js';
 import { DefinitionManager } from '../managers/definition.js';
 import {
   isReservedMetafieldNamespace,
   isReservedMetaobjectType,
+  filterDefinitionsByResourceType,
 } from './constants.js';
 
 /**
@@ -27,6 +34,80 @@ export class CommandHandler {
       logFile: this.globalOpts.log,
       dryRun: this.globalOpts.dryRun,
     });
+
+    // Store configuration manager instance
+    this.configManager = getConfigManager();
+  }
+
+  /**
+   * Get configuration defaults
+   */
+  getDefaults() {
+    return getDefaults();
+  }
+
+  /**
+   * Get environment information
+   */
+  getEnvironment() {
+    return getEnvironment();
+  }
+
+  /**
+   * Get configuration summary for debugging
+   */
+  getConfigSummary() {
+    return this.configManager.getConfigSummary();
+  }
+
+  /**
+   * Create Shopify client with enhanced error handling
+   */
+  createShopifyClient(storeName, options = {}) {
+    try {
+      const client = createShopifyClient(storeName);
+
+      if (this.getEnvironment().debug) {
+        this.logger.debug(`Created Shopify client for store: ${storeName}`, {
+          storeName,
+          hasClient: !!client,
+          options,
+        });
+      }
+
+      return client;
+    } catch (error) {
+      this.logger.error(
+        `Failed to create Shopify client for store '${storeName}':`,
+        error.message
+      );
+
+      // Provide helpful configuration information
+      const summary = this.getConfigSummary();
+      this.logger.info('Available stores:', summary.stores);
+
+      throw error;
+    }
+  }
+
+  /**
+   * Validate store names with enhanced error reporting
+   */
+  validateStoreNames(storeNames, context = 'operation') {
+    try {
+      return validateStoreNames(storeNames);
+    } catch (error) {
+      this.logger.error(
+        `Store validation failed for ${context}:`,
+        error.message
+      );
+
+      // Provide helpful configuration information
+      const summary = this.getConfigSummary();
+      this.logger.info('Configuration summary:', summary);
+
+      throw error;
+    }
   }
 
   /**
@@ -152,5 +233,148 @@ export class CommandHandler {
 
   createManager(client) {
     return new DefinitionManager(client, this.logger);
+  }
+
+  /**
+   * Common operation: Fetch definitions with optional entries and resource filtering
+   * @param {DefinitionManager} manager - The definition manager instance
+   * @param {Object} options - Options including includeEntries and resources
+   * @returns {Object} - Filtered definitions
+   */
+  async fetchAndFilterDefinitions(manager, options = {}) {
+    const { includeEntries = false, resources = 'both' } = options;
+
+    this.logger.info('Fetching definitions from store...');
+    const allDefinitions = includeEntries
+      ? await manager.getAllDefinitionsWithEntries()
+      : await manager.getAllDefinitions();
+
+    this.logger.verbose('Applying resource type filtering...');
+    return filterDefinitionsByResourceType(allDefinitions, resources);
+  }
+
+  /**
+   * Common operation: Standard definition processing flow
+   * @param {DefinitionManager} manager - The definition manager instance
+   * @param {Object} definitions - Raw definitions to process
+   * @param {Object} options - Processing options
+   * @returns {Object} - Processed definitions ready for operations
+   */
+  async prepareDefinitionsForOperation(manager, definitions, options = {}) {
+    const { resources = 'both', operation = 'process' } = options;
+
+    // Apply resource filtering
+    const resourceFiltered = filterDefinitionsByResourceType(
+      definitions,
+      resources
+    );
+
+    // Filter reserved definitions
+    const processed = this.filterReservedDefinitions(
+      manager,
+      resourceFiltered,
+      operation
+    );
+
+    if (!processed) {
+      throw new Error(`No definitions available to ${operation}`);
+    }
+
+    return processed;
+  }
+
+  /**
+   * Common operation: Handle entry operations with proper logging
+   * @param {DefinitionManager} manager - The definition manager instance
+   * @param {Object} definitions - Definitions with potential entries
+   * @param {Object} options - Entry operation options
+   * @returns {Object} - Entry operation results
+   */
+  async handleEntryOperations(manager, definitions, options = {}) {
+    const {
+      includeEntries = false,
+      operation = 'process',
+      dryRun = false,
+      ...operationOptions
+    } = options;
+
+    if (
+      !includeEntries ||
+      !definitions.metaobjects ||
+      definitions.metaobjects.length === 0
+    ) {
+      return null;
+    }
+
+    const entryCount = definitions.metaobjects.reduce(
+      (sum, def) => sum + (def.entries ? def.entries.length : 0),
+      0
+    );
+
+    if (entryCount === 0) {
+      this.logger.info('No metaobject entries found to process');
+      return null;
+    }
+
+    this.logger.info(`Processing ${entryCount} metaobject entries...`);
+
+    if (dryRun) {
+      this.logger.dryRunInfo(`Would ${operation} ${entryCount} entries`);
+      return { success: entryCount, errors: [] };
+    }
+
+    // Delegate to specific entry operation
+    switch (operation) {
+      case 'copy':
+        return await manager.copyMetaobjectEntries(
+          definitions.metaobjects,
+          operationOptions
+        );
+      case 'delete':
+        return await manager.deleteMetaobjectEntries(definitions, dryRun);
+      default:
+        throw new Error(`Unknown entry operation: ${operation}`);
+    }
+  }
+
+  /**
+   * Common operation: Log definition summary with entry counts
+   * @param {Object} definitions - Definitions to summarize
+   * @param {Object} options - Logging options
+   */
+  logDefinitionSummary(definitions, options = {}) {
+    const {
+      includeEntries = false,
+      operation = 'process',
+      verbose = false,
+    } = options;
+
+    const total =
+      definitions.metafields.length + definitions.metaobjects.length;
+    this.logger.info(`Preparing to ${operation} ${total} definitions:`);
+
+    if (definitions.metafields.length > 0) {
+      this.logger.info(`  Metafields: ${definitions.metafields.length}`);
+      if (verbose) {
+        definitions.metafields.forEach((def) => {
+          this.logger.verbose(
+            `    - ${def.namespace}.${def.key} (${def.name})`
+          );
+        });
+      }
+    }
+
+    if (definitions.metaobjects.length > 0) {
+      this.logger.info(`  Metaobjects: ${definitions.metaobjects.length}`);
+      if (verbose) {
+        definitions.metaobjects.forEach((def) => {
+          const entryInfo =
+            includeEntries && def.entries
+              ? ` [${def.entries.length} entries]`
+              : '';
+          this.logger.verbose(`    - ${def.type} (${def.name})${entryInfo}`);
+        });
+      }
+    }
   }
 }
