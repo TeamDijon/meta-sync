@@ -189,7 +189,9 @@ class CopyCommand extends CommandHandler {
     // Copy definitions to target
     this.logger.info('Copying definitions to target store...');
     const copyResults = await targetManager.copyDefinitionsWithDependencies(
-      definitionsToCopy
+      definitionsToCopy,
+      false, // dryRun = false
+      sourceManager // pass source manager for reference resolution
     );
 
     // Handle entries if requested

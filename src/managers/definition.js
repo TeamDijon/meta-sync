@@ -311,7 +311,11 @@ export class DefinitionManager {
     return result.data;
   }
 
-  async copyDefinitionsWithDependencies(definitions, dryRun = false) {
+  async copyDefinitionsWithDependencies(
+    definitions,
+    dryRun = false,
+    sourceManager = null
+  ) {
     // Filter out reserved definitions
     const { filtered, skipped } = this.filterReservedDefinitions(definitions);
 
@@ -329,6 +333,23 @@ export class DefinitionManager {
       );
       return results;
     }
+
+    // VALIDATION STEP: Build reference mapping for existing target store metaobjects
+    this.logger.verbose(
+      'Building metaobject reference mapping from target store...'
+    );
+    const targetDefinitions = await this.getAllDefinitions();
+    const existingMetaobjectMapping = this.buildMetaobjectTypeToIdMapping(
+      targetDefinitions.metaobjects
+    );
+
+    // ENHANCEMENT: Fetch ALL source definitions (including reserved) for reference resolution
+    this.logger.verbose(
+      'Fetching complete source definitions for reference resolution...'
+    );
+    const completeSourceDefinitions = sourceManager
+      ? await sourceManager.getAllDefinitions()
+      : await this.getAllDefinitions();
 
     // Track created metaobject IDs for reference mapping
     const metaobjectIdMapping = new Map();
@@ -350,7 +371,9 @@ export class DefinitionManager {
           // Update metaobject references in this definition before creating
           const updatedDef = this.updateMetaobjectReferences(
             def,
-            metaobjectIdMapping
+            metaobjectIdMapping,
+            completeSourceDefinitions, // Use complete source definitions for reference lookup
+            existingMetaobjectMapping // Pass target store type-to-ID mapping
           );
           const createdDefinition = await this.createMetaobjectDefinition(
             updatedDef
@@ -412,8 +435,18 @@ export class DefinitionManager {
     }
 
     // Copy metafield definitions second (after metaobjects exist and can be referenced)
+    // Update metafield references before creating them
+    const updatedMetafields = filtered.metafields.map((def) => {
+      return this.updateMetafieldReferences(
+        def,
+        metaobjectIdMapping,
+        completeSourceDefinitions, // Use complete source definitions for reference lookup
+        existingMetaobjectMapping
+      );
+    });
+
     const metafieldResults = await this.processDefinitions(
-      { metafields: filtered.metafields, metaobjects: [] },
+      { metafields: updatedMetafields, metaobjects: [] },
       {
         name: 'copy',
         metafield: async (def) => this.createMetafieldDefinition(def),
@@ -435,8 +468,107 @@ export class DefinitionManager {
     );
   }
 
+  // Helper method to build metaobject type to ID mapping
+  buildMetaobjectTypeToIdMapping(metaobjects) {
+    const mapping = new Map();
+
+    for (const metaobject of metaobjects) {
+      // Create mapping from type to ID for easy lookup
+      mapping.set(metaobject.type, metaobject.id);
+      this.logger.verbose(
+        `Mapped metaobject type '${metaobject.type}' to ID '${metaobject.id}'`
+      );
+    }
+
+    return mapping;
+  }
+
+  // Helper method to resolve metaobject reference by type
+  resolveMetaobjectReferenceByType(
+    sourceDefinitions,
+    targetTypeToIdMapping,
+    referencedId
+  ) {
+    // First, try to find the metaobject type from source definitions that has this ID
+    const sourceMetaobject = sourceDefinitions.metaobjects?.find(
+      (def) => def.id === referencedId
+    );
+
+    if (sourceMetaobject) {
+      // Check if this type exists in the target store
+      const targetId = targetTypeToIdMapping.get(sourceMetaobject.type);
+
+      if (targetId) {
+        this.logger.verbose(
+          `Resolved reference ${referencedId} -> type '${sourceMetaobject.type}' -> target ID '${targetId}'`
+        );
+        return targetId;
+      } else {
+        this.logger.verbose(
+          `No target mapping found for metaobject type '${sourceMetaobject.type}'`
+        );
+      }
+    } else {
+      this.logger.verbose(
+        `Could not find source metaobject with ID: ${referencedId}`
+      );
+    }
+
+    return null;
+  }
+
+  // Helper method to update metafield references with resolved metaobject IDs
+  updateMetafieldReferences(
+    definition,
+    idMapping,
+    sourceDefinitions = null,
+    targetTypeToIdMapping = null
+  ) {
+    const updatedDef = JSON.parse(JSON.stringify(definition)); // Deep clone
+
+    // Check if this metafield has metaobject_reference validations
+    if (updatedDef.validations && updatedDef.validations.length > 0) {
+      updatedDef.validations = updatedDef.validations.map((validation) => {
+        if (validation.name === METAOBJECT_REFERENCE_VALIDATION_KEY) {
+          const oldId = validation.value;
+
+          // First try the creation mapping (for metaobjects created in this operation)
+          let newId = idMapping.get(oldId);
+
+          // If not found in creation mapping, try to resolve via type mapping
+          if (!newId && sourceDefinitions && targetTypeToIdMapping) {
+            newId = this.resolveMetaobjectReferenceByType(
+              sourceDefinitions,
+              targetTypeToIdMapping,
+              oldId
+            );
+          }
+
+          if (newId) {
+            this.logger.verbose(
+              `Updating metafield reference: ${oldId} -> ${newId}`
+            );
+            return { ...validation, value: newId };
+          } else {
+            this.logger.verbose(
+              `No mapping found for metafield metaobject ID: ${oldId}`
+            );
+          }
+        }
+        return validation;
+      });
+    }
+
+    return updatedDef;
+  }
+
   // Helper method to update metaobject references with new IDs
-  updateMetaobjectReferences(definition, idMapping) {
+  updateMetaobjectReferences(
+    definition,
+    idMapping,
+    sourceDefinitions = null,
+    targetTypeToIdMapping = null
+  ) {
     const updatedDef = JSON.parse(JSON.stringify(definition)); // Deep clone
 
     updatedDef.fieldDefinitions = updatedDef.fieldDefinitions.map((field) => {
@@ -445,7 +577,18 @@ export class DefinitionManager {
         field.validations = field.validations.map((validation) => {
           if (validation.name === METAOBJECT_REFERENCE_VALIDATION_KEY) {
             const oldId = validation.value;
-            const newId = idMapping.get(oldId);
+
+            // First try the creation mapping (for metaobjects created in this operation)
+            let newId = idMapping.get(oldId);
+
+            // If not found in creation mapping, try to resolve via type mapping
+            if (!newId && sourceDefinitions && targetTypeToIdMapping) {
+              newId = this.resolveMetaobjectReferenceByType(
+                sourceDefinitions,
+                targetTypeToIdMapping,
+                oldId
+              );
+            }
 
             if (newId) {
               this.logger.verbose(
